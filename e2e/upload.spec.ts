@@ -6,6 +6,7 @@
 // ends up in Storage, and who can fetch it.
 import { expect, test, type BrowserContext, type CDPSession, type Page, type Request } from "@playwright/test";
 import { statSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { formatBytes } from "../src/lib/format";
 import { anonApi, apiClient, backend, fixture, signUp } from "./helpers";
 
@@ -16,7 +17,7 @@ let page: Page;
 let cdp: CDPSession;
 let email: string;
 let bookId: string;
-const uploads: { url: string; method: string; offset: number | null }[] = [];
+const uploads: { url: string; method: string; offset: number | null; bytes: number }[] = [];
 const appPosts: { url: string; bytes: number }[] = [];
 const fileSize = () => statSync(fixture("large.pdf")).size;
 
@@ -35,7 +36,7 @@ test.beforeAll(async ({ browser, baseURL }) => {
     const bytes = Number(request.headers()["content-length"] ?? request.postDataBuffer()?.length ?? 0);
     const origin = new URL(request.url()).origin;
     const offset = request.headers()["upload-offset"];
-    if (origin === storageOrigin && request.url().includes("/storage/v1/")) uploads.push({ url: request.url(), method, offset: offset === undefined ? null : Number(offset) });
+    if (origin === storageOrigin && request.url().includes("/storage/v1/")) uploads.push({ url: request.url(), method, offset: offset === undefined ? null : Number(offset), bytes });
     if (origin === appOrigin) appPosts.push({ url: request.url(), bytes });
   });
 });
@@ -115,11 +116,12 @@ test("uploads a large book with real progress, pause, resume and recovery from a
 test("the bytes went straight to Storage over the resumable protocol, never through the app server", async () => {
   const resumable = uploads.filter((u) => u.url.includes("/storage/v1/upload/resumable"));
   const chunk = 6 * 1024 * 1024;
-  // The file travelled as a series of 6 MB chunks, each starting where the previous one ended.
+  // Each request is bounded to 6 MB. A connection cut can hide a request from
+  // Chromium's event log; the final stored-size and range checks prove continuity.
   const offsets = [...new Set(resumable.map((u) => u.offset).filter((o): o is number => o !== null))].sort((a, b) => a - b);
   expect(offsets.length).toBeGreaterThanOrEqual(Math.ceil(fileSize() / chunk) - 1);
   expect(offsets.at(-1)!).toBeGreaterThanOrEqual(fileSize() - chunk);
-  for (let i = 1; i < offsets.length; i++) expect(offsets[i] - offsets[i - 1]).toBeLessThanOrEqual(chunk);
+  for (const request of resumable) expect(request.bytes).toBeLessThanOrEqual(chunk);
   // The interrupted chunk was re-sent from its own offset (a resume), not from zero.
   expect(resumable.filter((u) => u.offset === 0).length).toBeLessThanOrEqual(1);
 
@@ -145,6 +147,9 @@ test("a successful upload produces valid storage metadata", async () => {
   const tail = await fetch(signed.data!.signedUrl, { headers: { Range: `bytes=${size - 6}-${size - 1}` } });
   expect(await tail.text()).toBe("%%EOF\n");
   expect(head.headers.get("content-range")).toBe(`bytes 0-7/${size}`);
+  const stored = await fetch(signed.data!.signedUrl);
+  const hash = createHash("sha256").update(Buffer.from(await stored.arrayBuffer())).digest("hex");
+  expect(hash).toBe(book!.sha256);
 });
 
 test("uploading the very same file again is recognised instead of stored twice", async () => {

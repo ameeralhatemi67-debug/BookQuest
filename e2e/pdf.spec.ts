@@ -16,6 +16,7 @@ const label = (p: Page) => p.locator("header p").nth(1);
 
 /** Selects the text of the first line-ish span on a page, the way a reader would by dragging. */
 async function selectTextOnPage(p: Page, pageNumber: number) {
+  await p.locator(`[data-page="${pageNumber}"]`).scrollIntoViewIfNeeded();
   await p.evaluate((n) => {
     const layer = document.querySelector(`[data-page="${n}"] .pdf-text-layer`);
     const spans = [...(layer?.querySelectorAll("span") ?? [])].filter((s) => (s.textContent ?? "").trim().length > 20);

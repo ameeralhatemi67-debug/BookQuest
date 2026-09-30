@@ -4,6 +4,10 @@
 // keep the two in sync when changing a number here.
 
 export const MB = 1024 * 1024;
+// Match the hosted project's global Storage ceiling, which can be below our
+// per-format bucket limits. Local tests retain the full resumable-upload limits.
+const configuredMB = Number(process.env.NEXT_PUBLIC_UPLOAD_LIMIT_MB);
+const uploadCap = (mb: number) => Math.min(mb, Number.isFinite(configuredMB) && configuredMB > 0 ? configuredMB : mb) * MB;
 
 /** Files larger than this use the resumable (TUS) protocol. Supabase requires 6 MB chunks. */
 export const RESUMABLE_THRESHOLD_BYTES = 6 * MB;
@@ -22,21 +26,21 @@ interface FileRule {
 }
 
 export const BOOK_RULES: Record<BookFormat, FileRule> = {
-  epub: { label: "EPUB", maxBytes: 250 * MB, types: { epub: "application/epub+zip" } },
-  pdf: { label: "PDF", maxBytes: 500 * MB, types: { pdf: "application/pdf" } },
+  epub: { label: "EPUB", maxBytes: uploadCap(250), types: { epub: "application/epub+zip" } },
+  pdf: { label: "PDF", maxBytes: uploadCap(500), types: { pdf: "application/pdf" } },
 };
 
 export const ATTACHMENT_RULES: Record<AttachmentKind, FileRule & { bucket: string }> = {
   image: {
     label: "Image",
     bucket: "annotation-images",
-    maxBytes: 25 * MB,
+    maxBytes: uploadCap(25),
     types: { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif", avif: "image/avif" },
   },
   audio: {
     label: "Audio",
     bucket: "annotation-audio",
-    maxBytes: 100 * MB,
+    maxBytes: uploadCap(100),
     types: {
       mp3: "audio/mpeg", m4a: "audio/mp4", aac: "audio/aac", ogg: "audio/ogg", oga: "audio/ogg",
       opus: "audio/ogg", webm: "audio/webm", wav: "audio/wav", flac: "audio/flac",
@@ -46,14 +50,14 @@ export const ATTACHMENT_RULES: Record<AttachmentKind, FileRule & { bucket: strin
   video: {
     label: "Video",
     bucket: "annotation-video",
-    maxBytes: 500 * MB,
+    maxBytes: uploadCap(500),
     types: { mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", mov: "video/quicktime", ogv: "video/ogg" },
   },
 };
 
 export const AVATAR_RULE: FileRule = {
   label: "Avatar",
-  maxBytes: 10 * MB,
+  maxBytes: uploadCap(10),
   types: { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", webp: "image/webp", gif: "image/gif" },
 };
 

@@ -92,7 +92,7 @@ export function SignupForm({ next, code }: { next?: string; code?: string }) {
       options: {
         // Read by the database trigger that creates the profile and grants alpha access.
         data: { display_name: name.trim(), alpha_code: alphaCode.trim() },
-        emailRedirectTo: `${siteUrl()}/auth/callback?next=${encodeURIComponent(destination)}`,
+        emailRedirectTo: `${siteUrl()}/auth/confirm?next=${encodeURIComponent(destination)}`,
       },
     });
     if (signUpError) {
@@ -114,7 +114,7 @@ export function SignupForm({ next, code }: { next?: string; code?: string }) {
     return (
       <div className="space-y-4">
         <FormNotice>
-          We sent a confirmation link to <strong>{email}</strong>. Open it on this device to finish creating your account.
+          We sent a confirmation link to <strong>{email}</strong>. Open it to finish creating your account.
         </FormNotice>
         <p className="text-sm text-ink-soft">
           Nothing arrived? Check spam, or{" "}

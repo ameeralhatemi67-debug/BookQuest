@@ -5,7 +5,7 @@
 //   * the local emulator (`npm run dev:local`)  — persistent data directory
 //   * the database test-suite (`npm run test:db`) — fresh in-memory database
 import { PGlite, type Transaction } from "@electric-sql/pglite";
-import { readdir, readFile } from "node:fs/promises";
+import { mkdir, readdir, readFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -43,6 +43,7 @@ export interface CreateDbOptions {
 
 export async function createDb(options: CreateDbOptions = {}): Promise<EmuDb> {
   const log = options.log ?? (() => {});
+  if (options.dataDir) await mkdir(options.dataDir, { recursive: true });
   const pg = options.dataDir ? await PGlite.create(options.dataDir) : await PGlite.create();
 
   const booted = await pg.query<{ exists: boolean }>(

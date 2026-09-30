@@ -18,10 +18,10 @@ const variants: Record<Variant, string> = {
   danger: "border border-danger/30 bg-danger-soft text-danger hover:border-danger/60",
 };
 
-// Every size keeps at least a 40px hit area; `icon` is a 44px touch target.
+// Every size keeps at least a 44px hit area for touch.
 const sizes: Record<Size, string> = {
-  sm: "h-9 px-3.5 text-sm",
-  md: "h-10 px-5 text-sm",
+  sm: "min-h-11 px-3.5 text-sm",
+  md: "min-h-11 px-5 text-sm",
   lg: "h-12 px-7 text-base",
   icon: "size-11 shrink-0",
 };

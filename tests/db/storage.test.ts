@@ -24,7 +24,7 @@ describe("private storage", () => {
     const buckets = await w.owner<{ id: string; public: boolean; file_size_limit: string; allowed_mime_types: string[] }>(
       "select id, public, file_size_limit, allowed_mime_types from storage.buckets order by id",
     );
-    expect(buckets.map((b) => b.id)).toEqual(["annotation-audio", "annotation-images", "annotation-video", "avatars", "books", "covers"]);
+    expect(buckets.map((b) => b.id)).toEqual(["annotation-audio", "annotation-images", "annotation-video", "avatars", "books", "covers", "soundtracks"]);
     for (const bucket of buckets) {
       expect(bucket.public).toBe(bucket.id === "avatars");
       expect(Number(bucket.file_size_limit)).toBeGreaterThan(0);

@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowLeft, BookOpenCheck, ChevronLeft, ChevronRight, List, MessageSquareHeart, Minus, PenLine, Plus, RotateCcw, ScrollText, Settings2, Sparkles, WifiOff } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BookOpenCheck, ChevronLeft, ChevronRight, List, Maximize2, MessageSquareHeart, Minimize2, Minus, PenLine, Plus, RotateCcw, ScrollText, Settings2, Sparkles, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -22,13 +22,14 @@ import { NoteComposer } from "./composer";
 import { EpubViewer } from "./epub-viewer";
 import { MarkerButton, NoteThread, QUICK_REACTIONS, TrailList, type People } from "./notes";
 import { PdfViewer } from "./pdf-viewer";
+import { Soundtrack } from "./soundtrack";
 import { DEFAULT_SETTINGS, FONT_SIZE, LINE_HEIGHT, ZOOM, type ReaderError, type ReaderSettings, type ReaderTheme, type TocItem, type ViewerHandle, type ViewerLocation, type ViewerMarker, type ViewerSelection } from "./types";
 import { useAnnotations } from "./use-annotations";
 import { resumeAnchor, useProgressSaver } from "./use-progress";
 
 const SETTINGS_KEY = "marginalia:reader-settings";
 const BOOK_URL_SECONDS = 6 * 3600;
-const TABLES: RoomTable[] = ["reading_progress", "annotation_markers", "annotation_contents", "annotation_replies", "annotation_reactions", "reading_unlocks", "room_members"];
+const TABLES: RoomTable[] = ["reading_progress", "annotation_markers", "annotation_contents", "annotation_replies", "annotation_reactions", "reading_unlocks", "room_members", "soundtrack_tracks"];
 
 function loadSettings(): ReaderSettings {
   try {
@@ -50,7 +51,7 @@ function IconButton({ label, onClick, children, active, badge }: { label: string
         onClick={onClick}
         aria-label={badge ? `${label} (${badge} new)` : label}
         aria-pressed={active}
-        className={cn("relative flex size-11 items-center justify-center rounded-full text-ink-soft transition-colors hover:bg-sunk hover:text-ink", active && "bg-sunk text-ink")}
+        className={cn("reader-tool relative", active && "bg-sunk text-ink")}
       >
         {children}
         {badge ? (
@@ -121,6 +122,7 @@ function SettingsPanel({ settings, onChange, format }: { settings: ReaderSetting
             type="button"
             role="radio"
             aria-checked={settings.theme === theme}
+            aria-label={THEME_SWATCH[theme].label}
             onClick={() => onChange({ theme })}
             className={cn("flex h-14 flex-col items-center justify-center rounded-xl border text-sm font-medium transition-shadow", settings.theme === theme ? "border-accent ring-2 ring-accent/40" : "border-line-strong")}
             style={{ background: THEME_SWATCH[theme].bg, color: THEME_SWATCH[theme].fg }}
@@ -152,11 +154,11 @@ function SettingsPanel({ settings, onChange, format }: { settings: ReaderSetting
 /** The floating toolbar over a text selection: react in one tap, or write a note. */
 function SelectionToolbar({ selection, onReact, onNote }: { selection: ViewerSelection; onReact: (emoji: string) => void; onNote: () => void }) {
   if (!selection.rect) return null;
-  const width = 252;
+  const width = 272;
   const left = Math.min(Math.max(8, selection.rect.left + selection.rect.width / 2 - width / 2), window.innerWidth - width - 8);
   // Above the selection when there is room (clear of the native handles on touch), else below.
   const above = selection.rect.top > 120;
-  const top = above ? selection.rect.top - 56 : Math.min(window.innerHeight - 64, selection.rect.top + selection.rect.height + 12);
+  const top = Math.max(8, Math.min(window.innerHeight - 64, above ? selection.rect.top - 56 : selection.rect.top + selection.rect.height + 12));
   return (
     <div
       role="toolbar"
@@ -212,6 +214,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
   const [reveal, setReveal] = useState<string[]>([]);
   const [finished, setFinished] = useState(false);
   const [attempt, setAttempt] = useState(0);
+  const [musicRevision, setMusicRevision] = useState(0);
   const deepLinked = useRef(false);
 
   const annotations = useAnnotations({ roomId: initialRoom.id, meId: me.user_id });
@@ -324,7 +327,8 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
 
   const onChange = useCallback(
     (change: RoomChange) => {
-      if (change.table === "reading_progress" || change.table === "room_members") refreshMembers();
+      if (change.table === "soundtrack_tracks") setMusicRevision((n) => n + 1);
+      else if (change.table === "reading_progress" || change.table === "room_members") refreshMembers();
       else onAnnotationChange(change);
     },
     [onAnnotationChange, refreshMembers],
@@ -332,6 +336,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
   const onResync = useCallback(() => {
     refreshMembers();
     resyncAnnotations();
+    setMusicRevision((n) => n + 1);
   }, [resyncAnnotations, refreshMembers]);
 
   const { status: liveStatus, live } = useRoomChannel({
@@ -458,21 +463,22 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
         data-furthest={furthest.toFixed(4)}
         data-live={liveStatus}
         data-reader-theme={theme}
+        data-focus={chrome ? "false" : "true"}
         className={cn("reader-root fixed inset-0 flex flex-col overflow-hidden", theme === "dark" && "dark")}>
         {/* ---------------------------------------------------------- top bar */}
         <header
           className={cn(
-            "pt-safe absolute inset-x-0 top-0 z-20 border-b border-line/70 bg-paper/95 backdrop-blur-sm transition-transform duration-300",
-            !chrome && "-translate-y-full md:translate-y-0",
+            "reader-header pt-safe absolute inset-x-0 top-0 z-20 transition-transform duration-300",
+            !chrome && "-translate-y-full",
           )}
         >
-          <div className="flex h-14 items-center gap-1 px-1.5 sm:px-3">
+          <div className="mx-auto flex h-16 max-w-7xl items-center gap-0.5 px-1 sm:gap-2 sm:px-6">
             <Link href={`/rooms/${initialRoom.id}`} className="flex size-11 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-sunk hover:text-ink" aria-label={`Back to ${initialRoom.name}`}>
               <ArrowLeft className="size-5" aria-hidden />
             </Link>
             <div className="min-w-0 flex-1 px-1">
-              <p className="truncate font-display text-[15px] leading-tight text-ink">{book.title}</p>
-              <p className="truncate text-xs text-ink-faint">{location?.label ?? initialRoom.name}</p>
+              <p className="truncate font-display text-base leading-tight text-ink sm:text-xl">{book.title}</p>
+              <p className="truncate text-xs text-ink-soft">{location?.label ?? initialRoom.name}</p>
             </div>
             {!archived && (
               <IconButton label="Leave a note here" onClick={() => startNote(null)}>
@@ -485,6 +491,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
             <IconButton label="Contents" onClick={() => setPanel(panel === "toc" ? null : "toc")} active={panel === "toc"}>
               <List className="size-5" aria-hidden />
             </IconButton>
+            <Soundtrack roomId={initialRoom.id} meId={me.user_id} location={location} furthest={furthest} revision={musicRevision} archived={archived} canModerate={canModerate} />
             <Popover>
               <Tooltip label="Reading settings" side="bottom">
                 <PopoverTrigger className="flex size-11 items-center justify-center rounded-full text-ink-soft hover:bg-sunk hover:text-ink" aria-label="Reading settings">
@@ -507,7 +514,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
         </header>
 
         {/* ---------------------------------------------------------- the book */}
-        <main className="relative min-h-0 flex-1 pb-[4.5rem] pt-14" style={{ background: "var(--page)", color: "var(--page-ink)" }}>
+        <main className="reader-stage relative min-h-0 flex-1 pb-[5.5rem] pt-16" style={{ color: "var(--page-ink)" }}>
           {fatal ? (
             <div className="flex h-full items-center justify-center p-6">
               <div className="max-w-md text-center" role="alert">
@@ -593,6 +600,9 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
           )}
         </main>
 
+        <button type="button" className="reader-focus reader-tool" onClick={() => setChrome((c) => !c)} aria-label={chrome ? "Focus on the book" : "Show reading controls"} aria-pressed={!chrome}>
+          {chrome ? <Maximize2 className="size-4" aria-hidden /> : <Minimize2 className="size-4" aria-hidden />}
+        </button>
         {/* ---------------------------------------------------------- reveal */}
         {revealMarkers.length > 0 && !activeNote && !composer && (
           <div className="pointer-events-none absolute inset-x-0 bottom-24 z-30 flex justify-center px-4">
@@ -622,8 +632,8 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
         {/* ---------------------------------------------------------- bottom bar */}
         <footer
           className={cn(
-            "pb-safe absolute inset-x-0 bottom-0 z-20 border-t border-line/70 bg-paper/95 backdrop-blur-sm transition-transform duration-300",
-            !chrome && "translate-y-full md:translate-y-0",
+            "reader-footer pb-safe absolute inset-x-0 bottom-0 z-20 transition-transform duration-300",
+            !chrome && "translate-y-full",
           )}
         >
           <div className="mx-auto flex max-w-4xl items-center gap-1 px-1.5 pt-1 sm:gap-3 sm:px-4">

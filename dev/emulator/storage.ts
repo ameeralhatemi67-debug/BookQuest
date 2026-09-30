@@ -193,10 +193,11 @@ export function createStorage(db: EmuDb, options: StorageOptions) {
       }
     } finally {
       await new Promise<void>((resolve) => out.end(() => resolve()));
+      // A disconnected request can throw while reading: persist its partial
+      // offset before rethrowing so HEAD reports the actual bytes on disk.
+      upload.offset = (await stat(tusFile(upload.id))).size;
+      await saveTus(upload);
     }
-    // Whatever made it to disk counts, exactly like a real interrupted PATCH.
-    upload.offset = (await stat(tusFile(upload.id))).size;
-    await saveTus(upload);
   }
 
   async function finishTus(claims: Claims | null, upload: TusUpload) {

@@ -1,5 +1,7 @@
 # Handoff — Shared Reading closed alpha ("Marginalia")
 
+> Historical handoff. Work continued on 2026-09-30: see STATUS.md, SETUP.md and TESTING.md for the current implementation and hosted state.
+
 Written 2026-09-30 at a deliberate stopping point. Everything below is the state of the
 `alpha-build` branch at the commit that adds this file. `main` is untouched (initial commit only).
 Nothing has been pushed.

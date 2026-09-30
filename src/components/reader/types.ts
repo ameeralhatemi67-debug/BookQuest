@@ -17,7 +17,7 @@ export interface ReaderSettings {
   zoom: number;
 }
 
-export const DEFAULT_SETTINGS: ReaderSettings = { theme: "light", fontSize: 100, lineHeight: 1.6, width: "medium", font: "original", zoom: 1 };
+export const DEFAULT_SETTINGS: ReaderSettings = { theme: "light", fontSize: 110, lineHeight: 1.7, width: "medium", font: "serif", zoom: 1 };
 
 export const FONT_SIZE = { min: 80, max: 180, step: 10 };
 export const LINE_HEIGHT = { min: 1.3, max: 2.1, step: 0.1 };

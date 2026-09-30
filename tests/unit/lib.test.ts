@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { storageBaseUrl } from "@/lib/config";
 import { errorCode, friendlyError } from "@/lib/errors";
 import { formatBytes, formatClock, formatDuration, initials, isEmojiOnly, plural, timeAgo } from "@/lib/format";
@@ -9,6 +9,16 @@ import { gapPercent, layoutTrack, markerDensity, standings } from "@/lib/progres
 import { ROOM_MODE_LIST, roomMode } from "@/lib/room-modes";
 
 describe("upload validation", () => {
+  it("honours a hosted Storage ceiling without increasing smaller limits", async () => {
+    vi.stubEnv("NEXT_PUBLIC_UPLOAD_LIMIT_MB", "50");
+    vi.resetModules();
+    try {
+      const rules = await import("@/lib/limits");
+      expect(rules.BOOK_RULES.pdf.maxBytes).toBe(50 * MB);
+      expect(rules.ATTACHMENT_RULES.image.maxBytes).toBe(25 * MB);
+      expect(rules.validateBookFile({ name: "large.pdf", size: 51 * MB, type: "application/pdf" }).ok).toBe(false);
+    } finally { vi.unstubAllEnvs(); vi.resetModules(); }
+  });
   it("accepts EPUB and PDF up to their own ceilings", () => {
     expect(validateBookFile({ name: "Dune.epub", size: 249 * MB, type: "application/epub+zip" })).toMatchObject({ ok: true, value: { format: "epub", contentType: "application/epub+zip" } });
     expect(validateBookFile({ name: "Scan.PDF", size: 499 * MB, type: "application/pdf" })).toMatchObject({ ok: true, value: { format: "pdf" } });

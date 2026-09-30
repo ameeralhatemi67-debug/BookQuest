@@ -496,8 +496,8 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
   const byId = new Map(markers.map((m) => [m.id, m]));
 
   return (
-    <div className="relative mx-auto flex h-full w-full justify-center px-3 sm:px-12" style={{ maxWidth: WIDTH_PX[settings.width] + 96 }}>
-      <div ref={frame} className="relative h-full w-full">
+    <div className="reader-page relative mx-auto flex h-full w-full justify-center px-4 py-4 sm:px-12 sm:py-6" style={{ maxWidth: WIDTH_PX[settings.width] + 96 }}>
+      <div ref={frame} className="relative h-full w-full min-w-0">
         {/* epub.js renders the book's iframe into this element */}
         <div ref={host} className="h-full w-full" style={{ colorScheme: settings.theme === "dark" ? "dark" : "light" }} />
         {/* margin layer: things left on this page */}

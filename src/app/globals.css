@@ -13,7 +13,7 @@
   --sunk: #f2eadb;
   --ink: #2b2521;
   --ink-soft: #5f554c;
-  --ink-faint: #8d8276;
+  --ink-faint: #75695c;
   --line: #e5dac8;
   --line-strong: #d4c6ae;
   --accent: #b4532a;
@@ -85,8 +85,8 @@
 
   --animate-fade-up: fade-up 0.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   --animate-fade-in: fade-in 0.25s ease-out both;
-  --animate-pop-in: pop-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1.2) both;
-  --animate-marker-in: marker-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1.3) both;
+  --animate-pop-in: pop-in 0.22s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  --animate-marker-in: marker-in 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) both;
   --animate-unlock: unlock 1.4s cubic-bezier(0.2, 0.7, 0.2, 1) both;
   --animate-breathe: breathe 2.6s ease-in-out infinite;
   --animate-slide-in-right: slide-in-right 0.28s cubic-bezier(0.2, 0.7, 0.2, 1) both;
@@ -234,7 +234,7 @@
   --sunk: #e4d5b4;
   --ink: #3f3120;
   --ink-soft: #6a5a43;
-  --ink-faint: #8f7e63;
+  --ink-faint: #746248;
   --line: #d9c9a6;
   --line-strong: #c5b38c;
   --accent-soft: #ead3b6;
@@ -312,3 +312,54 @@
 .reader-root[data-reader-theme="dark"] .pdf-page canvas {
   filter: invert(0.9) hue-rotate(180deg) brightness(0.95) contrast(0.92);
 }
+
+/* A desk around the page; the book stays the brightest, quietest surface. */
+.reader-root[data-reader-theme="light"] {
+  --paper: #faf6ee; --raised: #fffdf8; --sunk: #f2eadb;
+  --ink: #2b2521; --ink-soft: #5f554c; --ink-faint: #75695c;
+  --line: #e5dac8; --line-strong: #d4c6ae;
+  --moss: #4f7a57; --moss-soft: #dfeadd; --gold: #c08a1e; --gold-soft: #f6e9c8;
+  --danger: #b3261e; --danger-soft: #f8dedb; --shadow-color: 40 25 10;
+  color-scheme: light;
+}
+.reader-root:is([data-reader-theme="light"], [data-reader-theme="sepia"]) {
+  --accent: #b4532a; --accent-hover: #9c4522; --accent-ink: #8a3d1d; --on-accent: #fffaf4;
+}
+.reader-header { background: var(--paper); border-bottom: 1px solid var(--line); }
+.reader-footer { background: var(--paper); border-top: 1px solid var(--line); }
+.reader-stage { background: var(--sunk); }
+.reader-page { background: var(--page); }
+.reader-tool {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 44px; height: 44px; flex-shrink: 0; border-radius: 50%;
+  color: var(--ink-soft); cursor: pointer;
+  transition: background-color 180ms ease-out, color 180ms ease-out, transform 180ms ease-out;
+}
+.reader-tool:hover { background: var(--sunk); color: var(--ink); }
+.reader-tool:active { transform: scale(.92); background: var(--accent-soft); }
+.reader-tool:disabled { opacity: .45; cursor: default; transform: none; }
+.reader-root button { min-width: 44px; min-height: 44px; }
+.reader-focus { position: absolute; bottom: 108px; right: 12px; z-index: 21; background: var(--paper); box-shadow: var(--shadow-soft); }
+.soundtrack-dock {
+  position: absolute; bottom: 104px; left: 12px; z-index: 22;
+  display: flex; align-items: center; gap: 8px;
+  width: min(360px, calc(100% - 80px)); padding: 8px; border-radius: 16px;
+  background: var(--raised); box-shadow: var(--shadow-lift); color: var(--ink);
+}
+.sound-wave { display: inline-flex; align-items: center; justify-content: center; gap: 2px; height: 14px; }
+.sound-wave i { width: 2px; height: 5px; border-radius: 2px; background: currentColor; animation: sound-wave 1s ease-in-out infinite alternate; }
+.sound-wave i:nth-child(2) { animation-delay: -.4s; }
+.sound-wave i:nth-child(3) { animation-delay: -.7s; }
+@keyframes sound-wave { to { height: 13px; } }
+input, textarea { caret-color: var(--accent); }
+button:not(:disabled), a { touch-action: manipulation; }
+@media (min-width: 768px) {
+  .reader-stage { padding-top: 88px; padding-bottom: 104px; }
+  .reader-page { border-radius: 4px; box-shadow: 0 8px 32px rgb(var(--shadow-color) / .09); }
+  .reader-focus { right: 28px; }
+  .soundtrack-dock { left: 28px; }
+}
+.reader-root[data-focus="true"] .reader-stage { padding-top: 20px; padding-bottom: 20px; }
+.reader-root[data-focus="true"] .reader-focus { bottom: 16px; }
+.reader-root[data-focus="true"] .soundtrack-dock { bottom: 16px; }
+@media (prefers-reduced-motion: reduce) { .sound-wave i { animation: none; } }

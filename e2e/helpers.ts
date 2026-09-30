@@ -133,7 +133,7 @@ export interface NoteOptions {
 
 // 2×3 PNG and a 0.2 s silent WAV, generated in memory — nothing binary is committed.
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAADCAIAAAA2iEnWAAAAFUlEQVR4nGPYEqT1//9/BhDeEqQFADyOB7fT3u7uAAAAAElFTkSuQmCC", "base64");
-function wav(seconds = 0.2): Buffer {
+export function wav(seconds = 0.2): Buffer {
   const rate = 8000;
   const samples = Math.floor(rate * seconds);
   const buffer = Buffer.alloc(44 + samples * 2);

@@ -16,7 +16,7 @@ export interface PresenceMeta {
 
 export type RoomTable =
   | "reading_progress" | "room_members" | "room_activity" | "annotation_markers" | "annotation_contents"
-  | "annotation_replies" | "annotation_reactions" | "reading_unlocks" | "rooms";
+  | "annotation_replies" | "annotation_reactions" | "reading_unlocks" | "rooms" | "soundtrack_tracks";
 
 export type ChannelStatus = "connecting" | "live" | "offline";
 
@@ -65,7 +65,6 @@ export function useRoomChannel({ roomId, userId, tables, onChange, onResync, pre
   useEffect(() => {
     const supabase = getSupabase();
     let disposed = false;
-    let wasOffline = false;
     let pollTimer: ReturnType<typeof setInterval> | null = null;
 
     const stopPolling = () => {
@@ -119,12 +118,9 @@ export function useRoomChannel({ roomId, userId, tables, onChange, onResync, pre
           stopPolling();
           setStatus("live");
           track(channel);
-          if (wasOffline) {
-            wasOffline = false;
-            handlers.current.onResync();
-          }
+          // Close the gap between the initial fetch and subscribing, too.
+          handlers.current.onResync();
         } else if (state === "CHANNEL_ERROR" || state === "TIMED_OUT" || state === "CLOSED") {
-          wasOffline = true;
           setStatus("offline");
           setLive(new Map());
           // While the socket is down, keep durable state fresh by polling.
