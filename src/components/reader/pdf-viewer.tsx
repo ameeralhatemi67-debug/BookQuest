@@ -203,10 +203,13 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
   useEffect(() => {
     const element = scroller.current;
     if (!element) return;
-    const measure = () => setContainer(current => current.width === element.clientWidth && current.height === element.clientHeight ? current : { width: element.clientWidth, height: element.clientHeight });
-    const observer = new ResizeObserver(measure);
+    // Use fractional content dimensions. clientWidth rounds up at some browser
+    // zoom levels, making a fitted page stack wider than its scroll container.
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setContainer(current => current.width === width && current.height === height ? current : { width, height });
+    });
     observer.observe(element);
-    measure();
     return () => observer.disconnect();
   }, []);
 
@@ -289,6 +292,7 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
   // Restore the saved position once the layout exists; keep the place when zoom / width changes.
   useLayoutEffect(() => {
     if (!doc || !baseSize || container.width === 0 || container.height === 0) return;
+    if (settings.zoom > 0.8 && scroller.current) scroller.current.scrollLeft = 0;
     if (!restored.current) {
       if (pendingAnchor.current) scrollToAnchor(pendingAnchor.current);
       restored.current = true;
@@ -298,7 +302,7 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
     if (currentAnchor.current) scrollToAnchor(currentAnchor.current);
     report();
     // `layout` changes whenever scale or page sizes change.
-  }, [doc, baseSize, container, layout, report, scrollToAnchor]);
+  }, [doc, baseSize, container, layout, settings.zoom, report, scrollToAnchor]);
 
   // ------------------------------------------------------------ selection → anchor
   useEffect(() => {
@@ -442,7 +446,7 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
   if (doc) for (let page = range[0]; page <= Math.min(range[1], pageCount); page++) pages.push(page);
 
   return (
-    <div ref={scroller} className="scroll-slim h-full w-full overflow-y-auto overflow-x-auto overscroll-contain" style={{ overflowAnchor: "none" }} tabIndex={0} aria-label="Book pages">
+    <div ref={scroller} className="scroll-slim h-full w-full overflow-y-auto overscroll-contain" style={{ overflowAnchor: "none", overflowX: settings.zoom <= 0.8 ? "auto" : "hidden" }} tabIndex={0} aria-label="Book pages">
       <div className="relative mx-auto" style={{ height: layout.total, width: layout.width }}>
         {doc &&
           pages.map((page) => {

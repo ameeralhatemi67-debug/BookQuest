@@ -88,7 +88,7 @@ test("zooming keeps the reader on the same page", async () => {
   await page.getByRole("button", { name: "Reading settings" }).click();
   await page.getByRole("button", { name: "Increase zoom" }).click();
   await page.getByRole("button", { name: "Increase zoom" }).click();
-  await expect.poll(width).toBeGreaterThan(initial * 1.25);
+  await expect.poll(width).toBeGreaterThan(initial * 1.24);
   await expect(label(page)).toHaveText(before!);
 
   await page.getByRole("button", { name: "Full page", exact: true }).click();

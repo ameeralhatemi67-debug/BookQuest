@@ -15,6 +15,11 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
       if (format === "pdf") {
         const viewport = page.getByLabel("Book pages", { exact: true });
         const first = page.locator('[data-page="1"]');
+        if (!touch) {
+          // Reproduce fractional available widths from OS scaling / browser zoom.
+          await page.getByTestId("reader").evaluate(element => { element.style.right = "0.3px"; });
+          await expect.poll(() => viewport.evaluate(element => element.getBoundingClientRect().width)).toBeLessThan(1360);
+        }
         const assertFits = async (numbers: number[]) => {
           const box = (await viewport.boundingBox())!;
           for (const number of numbers) {
@@ -25,20 +30,57 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
           }
         };
         await assertFits([1]);
+        await expect(viewport).toHaveCSS("overflow-x", "hidden");
+        const normalWidth = (await first.boundingBox())!.width;
         if (!touch) await page.screenshot({ path: ".local/reader-full-page.png" });
         await page.getByRole("button", { name: "Reading settings" }).click();
         await page.getByRole("button", { name: "Decrease zoom" }).click();
+        await expect(page.getByText("110%", { exact: true })).toBeVisible();
+        await assertFits([1]);
+        expect((await first.boundingBox())!.width).toBeLessThan(normalWidth);
+        await page.getByRole("button", { name: "Decrease zoom" }).click();
+        await expect(page.getByText("120%", { exact: true })).toBeVisible();
         await expect(page.getByRole("button", { name: "Decrease zoom" })).toBeDisabled();
         await page.keyboard.press("Escape"); await assertFits([1, 2]);
+        await expect(viewport).toHaveCSS("overflow-x", "hidden");
+        expect(await viewport.evaluate(element => element.scrollLeft)).toBe(0);
         if (!touch) await page.screenshot({ path: ".local/reader-two-pages.png" });
         const a = (await first.boundingBox())!, b = (await page.locator('[data-page="2"]').boundingBox())!;
         expect(a.y).toBeCloseTo(b.y, 0); expect(b.x).toBeGreaterThan(a.x + a.width);
+        expect(a.width).toBeLessThan(normalWidth * 0.85);
+        await page.getByRole("button", { name: "Reading settings" }).click();
+        await page.getByRole("button", { name: "Increase zoom" }).click();
+        await expect(page.getByText("110%", { exact: true })).toBeVisible();
+        await page.keyboard.press("Escape"); await assertFits([1]);
+        expect((await page.locator('[data-page="2"]').boundingBox())!.y).toBeGreaterThanOrEqual((await viewport.boundingBox())!.y + (await viewport.boundingBox())!.height);
+        await page.getByRole("button", { name: "Reading settings" }).click();
+        await page.getByRole("button", { name: "Two pages", exact: true }).click();
+        await page.keyboard.press("Escape");
         await page.getByRole("button", { name: "Next page" }).click();
         await expect(page.locator("header p").nth(1)).toHaveText("Page 3 of 24");
         await assertFits([3, 4]);
         await page.getByRole("button", { name: "Reading settings" }).click();
         await page.getByRole("button", { name: "Full page", exact: true }).click();
         await page.keyboard.press("Escape"); await assertFits([3]);
+        await page.getByRole("button", { name: "Reading settings" }).click();
+        await page.getByRole("button", { name: "Increase zoom" }).click();
+        await expect(viewport).toHaveCSS("overflow-x", "hidden"); // 90%
+        await page.getByRole("button", { name: "Increase zoom" }).click();
+        await expect(page.getByText("80%", { exact: true })).toBeVisible();
+        await expect(viewport).toHaveCSS("overflow-x", "auto");
+        for (let i = 0; i < 6; i++) await page.getByRole("button", { name: "Increase zoom" }).click();
+        await expect(page.getByText("20%", { exact: true })).toBeVisible();
+        await expect(page.getByRole("button", { name: "Increase zoom" })).toBeDisabled();
+        expect(await viewport.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
+        await viewport.evaluate(element => { element.scrollLeft = element.scrollWidth; });
+        expect(await viewport.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+        await page.getByRole("button", { name: "Two pages", exact: true }).click();
+        await expect(viewport).toHaveCSS("overflow-x", "hidden");
+        await expect.poll(() => viewport.evaluate(element => element.scrollLeft)).toBe(0);
+        await page.getByRole("button", { name: "Full page", exact: true }).click();
+        await page.keyboard.press("Escape");
+        await expect(page.locator("header p").nth(1)).toHaveText("Page 3 of 24");
+        await assertFits([3]);
       }
       const paper = format === "pdf" ? page.locator('[data-page="3"]') : page.frameLocator("iframe").locator("body");
       if (touch) {
@@ -82,6 +124,26 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
       const thread = page.getByRole("dialog", { name: "Note", exact: true });
       await expect(thread).toBeVisible();
       await expect.poll(() => thread.locator("img").last().evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(800);
+      if (format === "pdf" && !touch) {
+        await page.evaluate(() => {
+          localStorage.removeItem("marginalia:reader-settings:v2");
+          localStorage.setItem("marginalia:reader-settings", JSON.stringify({ theme: "dark", zoom: 0.8 }));
+        });
+        await page.reload();
+        await expect(page.getByTestId("reader")).toHaveAttribute("data-ready", "true");
+        await page.keyboard.press("Escape");
+        await expect(page.getByTestId("reader")).toHaveAttribute("data-reader-theme", "dark");
+        await page.getByRole("button", { name: "Reading settings" }).click();
+        await expect(page.getByText("120%", { exact: true })).toBeVisible();
+        await page.getByRole("button", { name: "Increase zoom" }).click();
+        await expect(page.getByText("110%", { exact: true })).toBeVisible();
+        expect(await page.evaluate(() => JSON.parse(localStorage.getItem("marginalia:reader-settings:v2")!).zoom)).toBe(1.1);
+        await page.reload();
+        await expect(page.getByTestId("reader")).toHaveAttribute("data-ready", "true");
+        await page.keyboard.press("Escape");
+        await page.getByRole("button", { name: "Reading settings" }).click();
+        await expect(page.getByText("110%", { exact: true })).toBeVisible();
+      }
       expect(errors.errors).toEqual([]);
     } finally { await context.close(); }
   });

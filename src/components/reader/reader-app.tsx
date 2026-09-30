@@ -27,14 +27,20 @@ import { DEFAULT_SETTINGS, FONT_SIZE, LINE_HEIGHT, ZOOM, type ReaderError, type 
 import { useAnnotations } from "./use-annotations";
 import { resumeAnchor, useProgressSaver } from "./use-progress";
 
-const SETTINGS_KEY = "marginalia:reader-settings";
+const SETTINGS_KEY = "marginalia:reader-settings:v2";
 const BOOK_URL_SECONDS = 6 * 3600;
 const TABLES: RoomTable[] = ["reading_progress", "annotation_markers", "annotation_contents", "annotation_replies", "annotation_reactions", "reading_unlocks", "room_members", "soundtrack_tracks"];
 
 function loadSettings(): ReaderSettings {
   try {
     const raw = localStorage.getItem(SETTINGS_KEY);
-    if (raw) return { ...DEFAULT_SETTINGS, ...(JSON.parse(raw) as Partial<ReaderSettings>) };
+    const legacy = !raw ? localStorage.getItem("marginalia:reader-settings") : null;
+    if (raw || legacy) {
+      const saved = JSON.parse((raw || legacy)!) as Partial<ReaderSettings>;
+      const value = typeof saved.zoom === "number" && Number.isFinite(saved.zoom) && saved.zoom > 0 ? saved.zoom : 1;
+      const zoom = legacy ? (value < 1 ? ZOOM.max : 1 / value) : value;
+      return { ...DEFAULT_SETTINGS, ...saved, zoom: Math.min(ZOOM.max, Math.max(ZOOM.min, zoom)) };
+    }
   } catch {
     // fall through
   }
@@ -64,19 +70,20 @@ function IconButton({ label, onClick, children, active, badge }: { label: string
   );
 }
 
-function Stepper({ label, value, onChange, min, max, step, format }: { label: string; value: number; onChange: (value: number) => void; min: number; max: number; step: number; format: (value: number) => string }) {
+function Stepper({ label, value, onChange, min, max, step, format, reversed = false }: { label: string; value: number; onChange: (value: number) => void; min: number; max: number; step: number; format: (value: number) => string; reversed?: boolean }) {
   const clamp = (v: number) => Math.round(Math.min(max, Math.max(min, v)) * 100) / 100;
+  const direction = reversed ? -1 : 1;
   return (
     <div className="flex items-center justify-between gap-3">
       <span className="text-sm text-ink-soft">{label}</span>
       <div className="flex items-center gap-1">
-        <button type="button" onClick={() => onChange(clamp(value - step))} disabled={value <= min + 1e-9} aria-label={`Decrease ${label.toLowerCase()}`} className="flex size-10 items-center justify-center rounded-full border border-line-strong text-ink hover:bg-sunk disabled:opacity-40">
+        <button type="button" onClick={() => onChange(clamp(value - step * direction))} disabled={reversed ? value >= max - 1e-9 : value <= min + 1e-9} aria-label={`Decrease ${label.toLowerCase()}`} className="flex size-10 items-center justify-center rounded-full border border-line-strong text-ink hover:bg-sunk disabled:opacity-40">
           <Minus className="size-4" aria-hidden />
         </button>
         <span className="w-14 text-center text-sm tabular-nums text-ink" aria-live="polite">
           {format(value)}
         </span>
-        <button type="button" onClick={() => onChange(clamp(value + step))} disabled={value >= max - 1e-9} aria-label={`Increase ${label.toLowerCase()}`} className="flex size-10 items-center justify-center rounded-full border border-line-strong text-ink hover:bg-sunk disabled:opacity-40">
+        <button type="button" onClick={() => onChange(clamp(value + step * direction))} disabled={reversed ? value <= min + 1e-9 : value >= max - 1e-9} aria-label={`Increase ${label.toLowerCase()}`} className="flex size-10 items-center justify-center rounded-full border border-line-strong text-ink hover:bg-sunk disabled:opacity-40">
           <Plus className="size-4" aria-hidden />
         </button>
       </div>
@@ -141,10 +148,11 @@ function SettingsPanel({ settings, onChange, format }: { settings: ReaderSetting
         </>
       ) : (
         <>
-          <Stepper label="Zoom" value={Math.max(ZOOM.min, settings.zoom)} onChange={(zoom) => onChange({ zoom })} {...ZOOM} format={(v) => v < 1 ? "2 pages" : `${Math.round(v * 100)}%`} />
+          <Stepper label="Zoom" value={settings.zoom} onChange={(zoom) => onChange({ zoom })} {...ZOOM} reversed format={(v) => `${Math.round(v * 100)}%`} />
+          <p className="text-xs leading-relaxed text-ink-faint">+ brings the book closer. − adds space around it. At 120%, two pages fit together.</p>
           <div className="flex gap-2">
             <Button variant="secondary" size="sm" onClick={() => onChange({ zoom: 1 })} aria-pressed={settings.zoom === 1}>Full page</Button>
-            <Button variant="secondary" size="sm" onClick={() => onChange({ zoom: ZOOM.min })} aria-pressed={settings.zoom < 1}>Two pages</Button>
+            <Button variant="secondary" size="sm" onClick={() => onChange({ zoom: ZOOM.max })} aria-pressed={settings.zoom === ZOOM.max}>Two pages</Button>
           </div>
         </>
       )}

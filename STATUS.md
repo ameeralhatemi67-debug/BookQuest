@@ -8,7 +8,7 @@ Auth and alpha access; EPUB/PDF upload and reading; room privacy, invitations an
 
 The reader now has an adaptive paper/desk layout, warmer editorial typography, focus mode, light/sepia/dark settings, 44 px controls, responsive overlays and restrained interaction states. Fixed mobile EPUB resize clipping and offscreen PDF selection controls. The local launcher now exists and the emulator recovers partial upload offsets correctly.
 
-PDFs open as complete pages fitted to both window dimensions. Zoom out once from 100% for two pages side by side; Full page / Two pages presets are in Reading settings, and zoom in remains available. Desktop double-click and phone double-tap open a note at the tapped passage. Draw in the note composer offers color and stroke-size controls, then saves the sketch as a PNG through the existing private attachment and spoiler-lock flow.
+PDFs use the owner-confirmed 20–120% book-view range. The default 100% fits one complete page; + enlarges the book toward 20%, while − adds margins up to 120%, which shows two smaller pages. Horizontal panning is available only at 80% and below. Fractional viewport measurement prevents unwanted scrollbars at browser zoom levels, and old saved preferences are converted to the new range. Full page / Two pages presets remain in Reading settings. Desktop double-click and phone double-tap open a note at the tapped passage. Draw in the note composer offers color and stroke-size controls, then saves the sketch as a PNG through the existing private attachment and spoiler-lock flow.
 
 ## Hosted state
 
@@ -22,6 +22,7 @@ Supabase is connected with committed migrations and private buckets. Vercel publ
 - The 64 MB local upload passes pause/resume, connection interruption, cancellation and full stored-file hash verification.
 - Mobile automation covers eight viewports from 320 px phones through 1440 px laptops, theme/focus controls, page cues, hide/show playback and reconnecting progress.
 - The subsequent reader-tools update passed 40 relevant browser cases: PDF zoom/highlights/resume, desktop and phone double-tap/drawing flows in both formats, Duo, and both responsive projects. No new library or database migration was needed.
+- The corrected 20–120% range passed all 13 reader browser cases and 60 unit tests, including both zoom limits, the 80% panning threshold, and conversion / persistence of old preferences.
 
 GitHub `main` and `alpha-build` feed the Vercel production pipeline at https://book-quest-ecru.vercel.app/. The initial hosted alpha was implementation commit `46c29b5`; the reader-tools update continues that deployment flow.
 
