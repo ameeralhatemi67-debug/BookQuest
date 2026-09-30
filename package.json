@@ -20,7 +20,9 @@
     "test:integration": "vitest run --project integration",
     "test:all": "vitest run",
     "emulator": "tsx dev/emulator/server.ts",
-    "dev:local": "node scripts/dev-local.mjs"
+    "dev:local": "node scripts/dev-local.mjs",
+    "predev": "node scripts/copy-pdf-assets.mjs",
+    "prebuild": "node scripts/copy-pdf-assets.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
@@ -34,6 +36,7 @@
     "radix-ui": "^1.6.7",
     "react": "19.2.8",
     "react-dom": "19.2.8",
+    "server-only": "^0.0.1",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.7.0",
     "tus-js-client": "^4.3.1"
@@ -48,6 +51,7 @@
     "@types/ws": "^8.18.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.7",
+    "jszip": "^3.10.2",
     "supabase": "^2.118.0",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",

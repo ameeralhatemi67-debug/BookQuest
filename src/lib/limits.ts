@@ -91,12 +91,16 @@ function checkAgainst(rule: FileRule, file: FileLike): Validation<{ contentType:
   if (!contentType) {
     return { ok: false, error: `That file type isn't supported here. Use ${Object.keys(rule.types).map((e) => `.${e}`).join(", ")}.` };
   }
-  // The browser-reported MIME type must agree with the extension when present.
+  // Browsers label files inconsistently ("audio/x-wav", "application/epub", nothing at
+  // all…), so the reported type only has to be the same *kind* of media as the
+  // extension. Books skip this entirely: their first bytes are inspected instead
+  // (sniffBookFormat), which is far more trustworthy than a label.
   const reported = baseMime(file.type);
-  if (reported && reported !== "application/octet-stream") {
+  const family = contentType.split("/")[0];
+  if (family !== "application" && reported && reported !== "application/octet-stream") {
     const normalized = rule.mimeAliases?.[reported] ?? reported;
-    if (!Object.values(rule.types).includes(normalized)) {
-      return { ok: false, error: `This file says it is "${reported}", which doesn't match a ${rule.label.toLowerCase()} file.` };
+    if (!normalized.startsWith(`${family}/`)) {
+      return { ok: false, error: `This file says it is "${reported}", which doesn't match ${family === "image" ? "an image" : `${family}`}.` };
     }
   }
   if (file.size <= 0) return { ok: false, error: "This file is empty." };

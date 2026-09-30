@@ -113,7 +113,10 @@ function standardUpload(options: UploadOptions, emit: (bytes: number) => void): 
         options.onStateChange?.("retrying", { attempt, delayMs });
         await new Promise((resolve) => setTimeout(resolve, delayMs));
       }
-      const { error } = await options.client.storage.from(options.bucket).upload(options.path, options.file, {
+      // Storage takes the type of a Blob body from the Blob itself, and browsers label
+      // files unreliably — so send the bytes under the content type we validated.
+      const body = options.file.type === options.contentType ? options.file : new Blob([options.file], { type: options.contentType });
+      const { error } = await options.client.storage.from(options.bucket).upload(options.path, body, {
         contentType: options.contentType,
         cacheControl: options.cacheControl ?? "3600",
         upsert: options.upsert ?? false,

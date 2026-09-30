@@ -60,3 +60,7 @@ next-env.d.ts
 # never commit books or user media
 *.epub
 *.pdf
+
+# local tooling
+/.claude/
+/.serena/

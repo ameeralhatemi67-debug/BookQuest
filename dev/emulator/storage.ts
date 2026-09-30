@@ -188,11 +188,11 @@ export function createStorage(db: EmuDb, options: StorageOptions) {
           req.socket.destroy();
           break;
         }
-        if (!out.write(buf)) await new Promise((resolve) => out.once("drain", resolve));
+        if (!out.write(buf)) await new Promise<void>((resolve) => out.once("drain", () => resolve()));
         received += buf.length;
       }
     } finally {
-      await new Promise((resolve) => out.end(resolve));
+      await new Promise<void>((resolve) => out.end(() => resolve()));
     }
     // Whatever made it to disk counts, exactly like a real interrupted PATCH.
     upload.offset = (await stat(tusFile(upload.id))).size;

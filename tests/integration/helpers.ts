@@ -74,8 +74,8 @@ export async function rpc<T = unknown>(tester: Tester, fn: string, args: Record<
 }
 
 /** Deterministic pseudo-random bytes (incompressible, reproducible, never committed). */
-export function syntheticBytes(size: number, seed = 1): Uint8Array {
-  const out = new Uint8Array(size);
+export function syntheticBytes(size: number, seed = 1): Uint8Array<ArrayBuffer> {
+  const out = new Uint8Array(new ArrayBuffer(size));
   let x = seed >>> 0 || 1;
   for (let i = 0; i < size; i++) {
     x ^= x << 13;
