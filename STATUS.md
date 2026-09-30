@@ -20,7 +20,11 @@ Supabase is connected with committed migrations and private buckets. Vercel publ
 - The 64 MB local upload passes pause/resume, connection interruption, cancellation and full stored-file hash verification.
 - Mobile automation covers eight viewports from 320 px phones through 1440 px laptops, theme/focus controls, page cues, hide/show playback and reconnecting progress.
 
-Production deployment and its final smoke result are recorded below after publication. Physical iOS/Android checks and actual SMTP delivery remain outside automated local verification. Production password-reset delivery requires configured SMTP.
+GitHub `main` and `alpha-build` were pushed with implementation commit `46c29b5`. Vercel production deployment `dpl_GS3ptdV4pvPfxpCnmVc1z7ZCP7Sw` is Ready and serves https://book-quest-ecru.vercel.app/.
+
+The hosted smoke passed on 2026-09-30: two temporary readers signed up, uploaded an EPUB, created/joined a private room, opened the reader, played shared audio and used a 390 px phone layout without overflow. Realtime connected live. Temporary test accounts, rooms, books and Storage files were removed. A fresh friend code preserves all 20 signup places.
+
+Physical iOS/Android checks and actual SMTP delivery remain outside automated local verification. Production password-reset delivery requires configured SMTP; the two admins receive private generated setup links instead.
 
 ## Remaining validation
 
