@@ -23,6 +23,10 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
         const assertFits = async (numbers: number[]) => {
           const box = (await viewport.boundingBox())!;
           for (const number of numbers) {
+            await expect.poll(async () => {
+              const paper = await page.locator(`[data-page="${number}"]`).boundingBox();
+              return paper && paper.x >= box.x - 1 && paper.y >= box.y - 1 && paper.x + paper.width <= box.x + box.width + 1 && paper.y + paper.height <= box.y + box.height + 1;
+            }).toBe(true);
             const paper = (await page.locator(`[data-page="${number}"]`).boundingBox())!;
             expect(paper.x).toBeGreaterThanOrEqual(box.x - 1); expect(paper.y).toBeGreaterThanOrEqual(box.y - 1);
             expect(paper.x + paper.width).toBeLessThanOrEqual(box.x + box.width + 1);
@@ -30,10 +34,18 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
           }
         };
         await assertFits([1]);
+        await expect(page.locator("footer.reader-footer")).toHaveCount(0);
+        const rail = page.getByRole("complementary", { name: "Reading progress" });
+        await expect(rail.locator('[data-orientation="vertical"]')).toBeVisible();
+        const railBox = (await rail.boundingBox())!;
+        expect(railBox.height).toBeGreaterThan(railBox.width * 5);
+        await rail.getByRole("button", { name: /Sketch.*you/ }).click();
+        await expect(page.getByText("(you)", { exact: true })).toBeVisible();
+        await page.keyboard.press("Escape");
         await expect(viewport).toHaveCSS("overflow-x", "hidden");
         const normalWidth = (await first.boundingBox())!.width;
+        if (!touch) expect((await first.boundingBox())!.height).toBeGreaterThan((await viewport.boundingBox())!.height * 0.94);
         if (!touch) await page.screenshot({ path: ".local/reader-full-page.png" });
-        await page.getByRole("button", { name: "Reading settings" }).click();
         await page.getByRole("button", { name: "Decrease zoom" }).click();
         await expect(page.getByText("110%", { exact: true })).toBeVisible();
         await assertFits([1]);
@@ -47,8 +59,28 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
         if (!touch) await page.screenshot({ path: ".local/reader-two-pages.png" });
         const a = (await first.boundingBox())!, b = (await page.locator('[data-page="2"]').boundingBox())!;
         expect(a.y).toBeCloseTo(b.y, 0); expect(b.x).toBeGreaterThan(a.x + a.width);
-        expect(a.width).toBeLessThan(normalWidth * 0.85);
-        await page.getByRole("button", { name: "Reading settings" }).click();
+        if (!touch) expect(a.height).toBeGreaterThan((await viewport.boundingBox())!.height * 0.94);
+        if (!touch) {
+          for (const [width, height] of [[320, 640], [360, 740], [390, 844], [430, 932], [768, 1024], [844, 390], [1024, 768], [1360, 860]]) {
+            await page.setViewportSize({ width, height });
+            await assertFits([1, 2]);
+            for (const number of [1, 2]) {
+              const paper = (await page.locator(`[data-page="${number}"]`).boundingBox())!;
+              for (const name of ["Previous page", "Next page"]) {
+                const arrow = (await page.getByRole("button", { name, exact: true }).boundingBox())!;
+                expect(arrow.x + arrow.width <= paper.x + 1 || arrow.x >= paper.x + paper.width - 1 || arrow.y >= paper.y + paper.height - 1).toBe(true);
+              }
+            }
+            const note = (await page.getByRole("button", { name: "Leave a note here" }).boundingBox())!;
+            for (const name of ["Decrease zoom", "Increase zoom"]) {
+              const control = (await page.getByRole("button", { name }).boundingBox())!;
+              expect(control.width).toBeGreaterThanOrEqual(44); expect(control.height).toBeGreaterThanOrEqual(44);
+              expect(control.x).toBeGreaterThanOrEqual(0); expect(control.x + control.width).toBeLessThanOrEqual(note.x);
+            }
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+            if (width === 390) await page.screenshot({ path: ".local/reader-phone-spread.png" });
+          }
+        }
         await page.getByRole("button", { name: "Increase zoom" }).click();
         await expect(page.getByText("110%", { exact: true })).toBeVisible();
         await page.keyboard.press("Escape"); await assertFits([1]);
@@ -62,7 +94,6 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
         await page.getByRole("button", { name: "Reading settings" }).click();
         await page.getByRole("button", { name: "Full page", exact: true }).click();
         await page.keyboard.press("Escape"); await assertFits([3]);
-        await page.getByRole("button", { name: "Reading settings" }).click();
         await page.getByRole("button", { name: "Increase zoom" }).click();
         await expect(viewport).toHaveCSS("overflow-x", "hidden"); // 90%
         await page.getByRole("button", { name: "Increase zoom" }).click();
@@ -74,6 +105,7 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
         expect(await viewport.evaluate(element => element.scrollWidth > element.clientWidth)).toBe(true);
         await viewport.evaluate(element => { element.scrollLeft = element.scrollWidth; });
         expect(await viewport.evaluate(element => element.scrollLeft)).toBeGreaterThan(0);
+        await page.getByRole("button", { name: "Reading settings" }).click();
         await page.getByRole("button", { name: "Two pages", exact: true }).click();
         await expect(viewport).toHaveCSS("overflow-x", "hidden");
         await expect.poll(() => viewport.evaluate(element => element.scrollLeft)).toBe(0);

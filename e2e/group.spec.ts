@@ -115,6 +115,12 @@ test("presence shows who is reading right now, and clears when they stop", async
 test("annotations identify their creators and replies stay understandable", async () => {
   const [fahad, khalid] = others;
   await openReader(owner, roomId);
+  const rail = owner.getByRole("complementary", { name: "Reading progress" });
+  const stack = rail.getByRole("button", { name: /2 readers here: .*Khalid Group.*Noor Group|2 readers here: .*Noor Group.*Khalid Group/ });
+  await stack.click();
+  await expect(owner.getByRole("dialog").last()).toContainText("Khalid Group");
+  await expect(owner.getByRole("dialog").last()).toContainText("Noor Group");
+  await owner.keyboard.press("Escape");
   await goToChapter(owner, /Chapter 2 ·/);
   await leaveNote(owner, { text: "First theory: the keeper never sent the letter." });
   await waitForSaved(owner, 0.08);

@@ -26,7 +26,15 @@ it("fits complete single pages and paired spreads, including phones, mixed sizes
   const normal = pdfLayout(sizes, 1360, 650, 1);
   expect(pdfLayout(sizes, 1360, 650, 0.5).widths[0]).toBeCloseTo(normal.widths[0] * 2);
   expect(pdfLayout(sizes, 1360, 650, 0.2).widths[0]).toBeCloseTo(normal.widths[0] * 5);
-  expect(pdfLayout(sizes, 1360, 650, 1.2).widths[0]).toBeLessThan(normal.widths[0] * 0.85);
+  const portrait = Array.from({ length: 2 }, () => ({ width: 612, height: 792 }));
+  for (const zoom of [1, 1.2]) {
+    const fitted = pdfLayout(portrait, 1304, 796, zoom);
+    expect(fitted.heights[0]).toBeCloseTo(764);
+    expect(fitted.lefts[0]).toBeGreaterThanOrEqual(48);
+    expect(fitted.lefts[zoom === 1.2 ? 1 : 0] + fitted.widths[0]).toBeLessThanOrEqual(1304 - 48);
+  }
+  expect(pdfLayout(portrait, 342, 740, 1).widths[0]).toBeCloseTo(326);
+  expect(pdfLayout(portrait, 342, 440, 1).heights[0]).toBeLessThanOrEqual(440 - 88);
   expect(pdfLayout(sizes, 1360, 650, 1.19).columns).toBe(1);
   expect(pdfViewState({ pageTops: [16, 1020.4], pageHeights: [1000, 1000], scrollTop: 1020, viewportHeight: 600 }).page).toBe(2);
 });

@@ -112,7 +112,9 @@ test("B · sees A's progress and neutral markers ahead, and nothing else", async
 
   await openReader(sara, roomId);
   expect(await readerProgress(sara)).toBeLessThan(0.1);
+  await sara.getByRole("button", { name: "Reading status" }).press("Enter");
   await expect(sara.getByText("3 things waiting ahead")).toBeVisible();
+  await sara.keyboard.press("Escape");
 
   // The trail says who left something — never what.
   await sara.getByRole("button", { name: /What's been left in this book/ }).click();
@@ -211,7 +213,9 @@ test("B · reaches 45%: the second note unlocks, with its image", async () => {
   const contents = await api.from("annotation_contents").select("body").eq("room_id", roomId);
   expect(contents.data).toHaveLength(2);
   expect(JSON.stringify(contents.data)).not.toContain("Listen to this");
+  await sara.getByRole("button", { name: "Reading status" }).press("Enter");
   await expect(sara.getByText("1 thing waiting ahead")).toBeVisible();
+  await sara.keyboard.press("Escape");
 });
 
 test("B · refreshes the browser: place and unlocks survive", async () => {

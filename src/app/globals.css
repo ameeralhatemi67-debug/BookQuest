@@ -325,9 +325,19 @@
 .reader-root:is([data-reader-theme="light"], [data-reader-theme="sepia"]) {
   --accent: #b4532a; --accent-hover: #9c4522; --accent-ink: #8a3d1d; --on-accent: #fffaf4;
 }
+.reader-root { --reader-header-height: 64px; --reader-rail-width: 56px; }
 .reader-header { background: var(--paper); border-bottom: 1px solid var(--line); }
-.reader-footer { background: var(--paper); border-top: 1px solid var(--line); }
-.reader-stage { background: var(--sunk); }
+.reader-header-content { display: flex; align-items: center; gap: 8px; height: var(--reader-header-height); }
+.reader-heading { display: flex; align-items: center; flex: 1; min-width: 0; gap: 4px; }
+.reader-actions { display: flex; align-items: center; gap: 4px; }
+.reader-zoom { position: relative; flex-shrink: 0; border: 1px solid var(--line); border-radius: 999px; }
+.reader-stage { background: var(--sunk); padding: calc(var(--reader-header-height) + env(safe-area-inset-top)) 0 env(safe-area-inset-bottom) var(--reader-rail-width); }
+.reader-progress { top: calc(var(--reader-header-height) + env(safe-area-inset-top) + 16px); bottom: max(16px, env(safe-area-inset-bottom)); left: 0; width: var(--reader-rail-width); }
+.reader-connection { position: absolute; left: 100%; bottom: 0; width: max-content; max-width: calc(100vw - 80px); }
+.reader-book[data-format="epub"] { padding: 16px 48px; }
+.reader-turn { position: absolute; top: 50%; translate: 0 -50%; z-index: 5; background: var(--paper); }
+.reader-turn-prev { left: 2px; }
+.reader-turn-next { right: 2px; }
 .reader-page { background: var(--page); }
 .reader-tool {
   display: inline-flex; align-items: center; justify-content: center;
@@ -339,11 +349,11 @@
 .reader-tool:active { transform: scale(.92); background: var(--accent-soft); }
 .reader-tool:disabled { opacity: .45; cursor: default; transform: none; }
 .reader-root button { min-width: 44px; min-height: 44px; }
-.reader-focus { position: absolute; bottom: 108px; right: 12px; z-index: 21; background: var(--paper); box-shadow: var(--shadow-soft); }
+.reader-focus { position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); right: 12px; z-index: 21; background: var(--paper); box-shadow: var(--shadow-soft); }
 .soundtrack-dock {
-  position: absolute; bottom: 104px; left: 12px; z-index: 22;
+  position: absolute; bottom: max(16px, env(safe-area-inset-bottom)); left: calc(var(--reader-rail-width) + 12px); z-index: 22;
   display: flex; align-items: center; gap: 8px;
-  width: min(360px, calc(100% - 80px)); padding: 8px; border-radius: 16px;
+  width: min(360px, calc(100% - var(--reader-rail-width) - 80px)); padding: 8px; border-radius: 16px;
   background: var(--raised); box-shadow: var(--shadow-lift); color: var(--ink);
 }
 .sound-wave { display: inline-flex; align-items: center; justify-content: center; gap: 2px; height: 14px; }
@@ -354,12 +364,23 @@
 input, textarea { caret-color: var(--accent); }
 button:not(:disabled), a { touch-action: manipulation; }
 @media (min-width: 768px) {
-  .reader-stage { padding-top: 88px; padding-bottom: 104px; }
   .reader-page { border-radius: 4px; box-shadow: 0 8px 32px rgb(var(--shadow-color) / .09); }
   .reader-focus { right: 28px; }
-  .soundtrack-dock { left: 28px; }
 }
-.reader-root[data-focus="true"] .reader-stage { padding-top: 20px; padding-bottom: 20px; }
-.reader-root[data-focus="true"] .reader-focus { bottom: 16px; }
-.reader-root[data-focus="true"] .soundtrack-dock { bottom: 16px; }
+@media (max-width: 695px) {
+  .reader-book[data-format="epub"] { padding: 8px 16px 64px; }
+  .reader-turn { top: auto; bottom: 12px; translate: none; }
+  .reader-turn-next { right: 64px; }
+  .soundtrack-dock { bottom: calc(76px + env(safe-area-inset-bottom)); }
+}
+@media (max-width: 639px) {
+  .reader-root { --reader-header-height: 104px; --reader-rail-width: 48px; }
+  .reader-header-content { flex-wrap: wrap; gap: 0; }
+  .reader-heading { flex-basis: 100%; height: 48px; }
+  .reader-actions { width: 100%; height: 56px; justify-content: flex-end; gap: 0; }
+  .reader-zoom-value { position: absolute; bottom: -1px; left: 50%; transform: translateX(-50%); font-size: 10px; pointer-events: none; }
+}
+.reader-root[data-focus="true"] .reader-stage { padding-top: env(safe-area-inset-top); padding-left: 0; }
+.reader-root[data-focus="true"] .reader-turn { display: none; }
+.reader-root[data-focus="true"] .soundtrack-dock { left: 12px; }
 @media (prefers-reduced-motion: reduce) { .sound-wave i { animation: none; } }

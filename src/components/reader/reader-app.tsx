@@ -70,20 +70,20 @@ function IconButton({ label, onClick, children, active, badge }: { label: string
   );
 }
 
-function Stepper({ label, value, onChange, min, max, step, format, reversed = false }: { label: string; value: number; onChange: (value: number) => void; min: number; max: number; step: number; format: (value: number) => string; reversed?: boolean }) {
+function Stepper({ label, value, onChange, min, max, step, format, reversed = false, compact = false }: { label: string; value: number; onChange: (value: number) => void; min: number; max: number; step: number; format: (value: number) => string; reversed?: boolean; compact?: boolean }) {
   const clamp = (v: number) => Math.round(Math.min(max, Math.max(min, v)) * 100) / 100;
   const direction = reversed ? -1 : 1;
   return (
-    <div className="flex items-center justify-between gap-3">
-      <span className="text-sm text-ink-soft">{label}</span>
-      <div className="flex items-center gap-1">
-        <button type="button" onClick={() => onChange(clamp(value - step * direction))} disabled={reversed ? value >= max - 1e-9 : value <= min + 1e-9} aria-label={`Decrease ${label.toLowerCase()}`} className="flex size-10 items-center justify-center rounded-full border border-line-strong text-ink hover:bg-sunk disabled:opacity-40">
+    <div className={compact ? "reader-zoom" : "flex items-center justify-between gap-3"}>
+      {!compact && <span className="text-sm text-ink-soft">{label}</span>}
+      <div className={cn("flex items-center", !compact && "gap-1")}>
+        <button type="button" onClick={() => onChange(clamp(value - step * direction))} disabled={reversed ? value >= max - 1e-9 : value <= min + 1e-9} aria-label={`Decrease ${label.toLowerCase()}`} className={compact ? "reader-tool" : "flex size-10 items-center justify-center rounded-full border border-line-strong text-ink hover:bg-sunk disabled:opacity-40"}>
           <Minus className="size-4" aria-hidden />
         </button>
-        <span className="w-14 text-center text-sm tabular-nums text-ink" aria-live="polite">
+        <span className={cn("text-center text-sm tabular-nums text-ink", compact ? "reader-zoom-value w-10" : "w-14")} aria-live="polite">
           {format(value)}
         </span>
-        <button type="button" onClick={() => onChange(clamp(value + step * direction))} disabled={reversed ? value <= min + 1e-9 : value >= max - 1e-9} aria-label={`Increase ${label.toLowerCase()}`} className="flex size-10 items-center justify-center rounded-full border border-line-strong text-ink hover:bg-sunk disabled:opacity-40">
+        <button type="button" onClick={() => onChange(clamp(value + step * direction))} disabled={reversed ? value <= min + 1e-9 : value >= max - 1e-9} aria-label={`Increase ${label.toLowerCase()}`} className={compact ? "reader-tool" : "flex size-10 items-center justify-center rounded-full border border-line-strong text-ink hover:bg-sunk disabled:opacity-40"}>
           <Plus className="size-4" aria-hidden />
         </button>
       </div>
@@ -148,8 +148,7 @@ function SettingsPanel({ settings, onChange, format }: { settings: ReaderSetting
         </>
       ) : (
         <>
-          <Stepper label="Zoom" value={settings.zoom} onChange={(zoom) => onChange({ zoom })} {...ZOOM} reversed format={(v) => `${Math.round(v * 100)}%`} />
-          <p className="text-xs leading-relaxed text-ink-faint">+ brings the book closer. − adds space around it. At 120%, two pages fit together.</p>
+          <p className="text-xs leading-relaxed text-ink-faint">Use + and − beside the note button. 100% fits one page; 120% fits two.</p>
           <div className="flex gap-2">
             <Button variant="secondary" size="sm" onClick={() => onChange({ zoom: 1 })} aria-pressed={settings.zoom === 1}>Full page</Button>
             <Button variant="secondary" size="sm" onClick={() => onChange({ zoom: ZOOM.max })} aria-pressed={settings.zoom === ZOOM.max}>Two pages</Button>
@@ -477,139 +476,153 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
         className={cn("reader-root fixed inset-0 flex flex-col overflow-hidden", theme === "dark" && "dark")}>
         {/* ---------------------------------------------------------- top bar */}
         <header
+          inert={!chrome}
           className={cn(
             "reader-header pt-safe absolute inset-x-0 top-0 z-20 transition-transform duration-300",
             !chrome && "-translate-y-full",
           )}
         >
-          <div className="mx-auto flex h-16 max-w-7xl items-center gap-0.5 px-1 sm:gap-2 sm:px-6">
-            <Link href={`/rooms/${initialRoom.id}`} className="flex size-11 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-sunk hover:text-ink" aria-label={`Back to ${initialRoom.name}`}>
-              <ArrowLeft className="size-5" aria-hidden />
-            </Link>
-            <div className="min-w-0 flex-1 px-1">
-              <p className="truncate font-display text-base leading-tight text-ink sm:text-xl">{book.title}</p>
-              <p className="truncate text-xs text-ink-soft">{location?.label ?? initialRoom.name}</p>
+          <div className="reader-header-content mx-auto max-w-7xl px-1 sm:px-6">
+            <div className="reader-heading">
+              <Link href={`/rooms/${initialRoom.id}`} className="flex size-11 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-sunk hover:text-ink" aria-label={`Back to ${initialRoom.name}`}>
+                <ArrowLeft className="size-5" aria-hidden />
+              </Link>
+              <div className="min-w-0 flex-1 px-1">
+                <p className="truncate font-display text-base leading-tight text-ink sm:text-xl">{book.title}</p>
+                <p className="truncate text-xs text-ink-soft">{location?.label ?? initialRoom.name}</p>
+              </div>
             </div>
-            {!archived && (
-              <IconButton label="Leave a note here" onClick={() => startNote(null)}>
-                <PenLine className="size-5" aria-hidden />
+            <div className="reader-actions">
+              {book.format === "pdf" && <Stepper label="Zoom" value={settings.zoom} onChange={(zoom) => updateSettings({ zoom })} {...ZOOM} reversed compact format={(v) => `${Math.round(v * 100)}%`} />}
+              {!archived && (
+                <IconButton label="Leave a note here" onClick={() => startNote(null)}>
+                  <PenLine className="size-5" aria-hidden />
+                </IconButton>
+              )}
+              <IconButton label="What's been left in this book" onClick={() => setPanel(panel === "trail" ? null : "trail")} active={panel === "trail"} badge={unseenCount}>
+                <Sparkles className="size-5" aria-hidden />
               </IconButton>
-            )}
-            <IconButton label="What's been left in this book" onClick={() => setPanel(panel === "trail" ? null : "trail")} active={panel === "trail"} badge={unseenCount}>
-              <Sparkles className="size-5" aria-hidden />
-            </IconButton>
-            <IconButton label="Contents" onClick={() => setPanel(panel === "toc" ? null : "toc")} active={panel === "toc"}>
-              <List className="size-5" aria-hidden />
-            </IconButton>
-            <Soundtrack roomId={initialRoom.id} meId={me.user_id} location={location} furthest={furthest} revision={musicRevision} archived={archived} canModerate={canModerate} />
-            <Popover>
-              <Tooltip label="Reading settings" side="bottom">
-                <PopoverTrigger className="flex size-11 items-center justify-center rounded-full text-ink-soft hover:bg-sunk hover:text-ink" aria-label="Reading settings">
-                  <Settings2 className="size-5" aria-hidden />
-                </PopoverTrigger>
-              </Tooltip>
-              <PopoverContent align="end" className="w-[min(320px,calc(100vw-1rem))]">
-                <SettingsPanel settings={settings} onChange={updateSettings} format={book.format} />
-                <div className="mt-4 border-t border-line pt-3">
-                  <FeedbackDialog>
-                    <button type="button" className="flex h-10 w-full items-center gap-2 rounded-xl px-2 text-sm text-ink-soft hover:bg-sunk hover:text-ink">
-                      <MessageSquareHeart className="size-4 text-accent" aria-hidden />
-                      Send feedback about this page
-                    </button>
-                  </FeedbackDialog>
-                </div>
-              </PopoverContent>
-            </Popover>
+              <IconButton label="Contents" onClick={() => setPanel(panel === "toc" ? null : "toc")} active={panel === "toc"}>
+                <List className="size-5" aria-hidden />
+              </IconButton>
+              <Soundtrack roomId={initialRoom.id} meId={me.user_id} location={location} furthest={furthest} revision={musicRevision} archived={archived} canModerate={canModerate} />
+              <Popover>
+                <Tooltip label="Reading settings" side="bottom">
+                  <PopoverTrigger className="flex size-11 items-center justify-center rounded-full text-ink-soft hover:bg-sunk hover:text-ink" aria-label="Reading settings">
+                    <Settings2 className="size-5" aria-hidden />
+                  </PopoverTrigger>
+                </Tooltip>
+                <PopoverContent align="end" className="w-[min(320px,calc(100vw-1rem))]">
+                  <SettingsPanel settings={settings} onChange={updateSettings} format={book.format} />
+                  <div className="mt-4 border-t border-line pt-3">
+                    <FeedbackDialog>
+                      <button type="button" className="flex h-10 w-full items-center gap-2 rounded-xl px-2 text-sm text-ink-soft hover:bg-sunk hover:text-ink">
+                        <MessageSquareHeart className="size-4 text-accent" aria-hidden />
+                        Send feedback about this page
+                      </button>
+                    </FeedbackDialog>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
           </div>
         </header>
 
         {/* ---------------------------------------------------------- the book */}
-        <main className="reader-stage relative min-h-0 flex-1 pb-[5.5rem] pt-16" style={{ color: "var(--page-ink)" }}>
-          {fatal ? (
-            <div className="flex h-full items-center justify-center p-6">
-              <div className="max-w-md text-center" role="alert">
-                <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-sunk text-ink-soft">
-                  <AlertTriangle className="size-5" aria-hidden />
-                </span>
-                <h1 className="mt-4 text-2xl text-ink">{fatal.title}</h1>
-                <p className="mt-2 text-sm leading-relaxed text-ink-soft">{fatal.body}</p>
-                <div className="mt-5 flex justify-center gap-2">
-                  {fatal.retry && (
-                    <Button
-                      onClick={() => {
-                        setFailure(null);
-                        setUrl(null);
-                        setReady(false);
-                        setAttempt((n) => n + 1);
-                      }}
-                      icon={<RotateCcw className="size-4" aria-hidden />}
-                    >
-                      Try again
-                    </Button>
-                  )}
-                  <Link href={`/rooms/${initialRoom.id}`} className={buttonClass("secondary")}>
-                    Back to the room
-                  </Link>
+        <main className="reader-stage relative min-h-0 flex-1" style={{ color: "var(--page-ink)" }}>
+          <div className="reader-book relative h-full min-w-0" data-format={book.format}>
+            {fatal ? (
+              <div className="flex h-full items-center justify-center p-6">
+                <div className="max-w-md text-center" role="alert">
+                  <span className="mx-auto flex size-12 items-center justify-center rounded-full bg-sunk text-ink-soft">
+                    <AlertTriangle className="size-5" aria-hidden />
+                  </span>
+                  <h1 className="mt-4 text-2xl text-ink">{fatal.title}</h1>
+                  <p className="mt-2 text-sm leading-relaxed text-ink-soft">{fatal.body}</p>
+                  <div className="mt-5 flex justify-center gap-2">
+                    {fatal.retry && (
+                      <Button
+                        onClick={() => {
+                          setFailure(null);
+                          setUrl(null);
+                          setReady(false);
+                          setAttempt((n) => n + 1);
+                        }}
+                        icon={<RotateCcw className="size-4" aria-hidden />}
+                      >
+                        Try again
+                      </Button>
+                    )}
+                    <Link href={`/rooms/${initialRoom.id}`} className={buttonClass("secondary")}>
+                      Back to the room
+                    </Link>
+                  </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            <>
-              {url && book.format === "epub" && (
-                <EpubViewer
-                  key={`${url}-${attempt}`}
-                  ref={viewer}
-                  bookId={book.id}
-                  url={url}
-                  size={book.size_bytes}
-                  hasLocations={book.has_locations}
-                  locationsPath={`${book.uploader_id}/${book.id}/locations.json`}
-                  settings={settings}
-                  initialAnchor={initialAnchor}
-                  markers={viewerMarkers}
-                  renderMarker={renderMarker}
-                  onReady={(info) => {
-                    setToc(info.toc);
-                    setReady(true);
-                  }}
-                  onRelocate={onRelocate}
-                  onSelection={setSelection}
-                  onAddNote={(target) => { if (!archived) startNote(target); }}
-                  onToggleChrome={() => setChrome((c) => !c)}
-                  onError={onViewerError}
-                  onLoadProgress={setLoadFraction}
-                />
-              )}
-              {url && book.format === "pdf" && (
-                <PdfViewer
-                  key={`${url}-${attempt}`}
-                  ref={viewer}
-                  bookId={book.id}
-                  url={url}
-                  settings={settings}
-                  initialAnchor={initialAnchor}
-                  markers={viewerMarkers}
-                  renderMarker={renderMarker}
-                  onReady={(info) => {
-                    setToc(info.toc);
-                    setReady(true);
-                  }}
-                  onRelocate={onRelocate}
-                  onSelection={setSelection}
-                  onAddNote={(target) => { if (!archived) startNote(target); }}
-                  onToggleChrome={() => setChrome((c) => !c)}
-                  onError={onViewerError}
-                  onLoadProgress={setLoadFraction}
-                />
-              )}
-              {!ready && (
-                <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4" style={{ background: "var(--page)" }} role="status" aria-live="polite">
-                  <Spinner className="size-6" label="Opening the book" />
-                  <p className="text-sm text-ink-soft">{loadFraction !== null && loadFraction > 0 && loadFraction < 1 ? `Opening the book… ${Math.floor(loadFraction * 100)}%` : "Opening the book…"}</p>
-                </div>
-              )}
-            </>
-          )}
+            ) : (
+              <>
+                {url && book.format === "epub" && (
+                  <EpubViewer
+                    key={`${url}-${attempt}`}
+                    ref={viewer}
+                    bookId={book.id}
+                    url={url}
+                    size={book.size_bytes}
+                    hasLocations={book.has_locations}
+                    locationsPath={`${book.uploader_id}/${book.id}/locations.json`}
+                    settings={settings}
+                    initialAnchor={initialAnchor}
+                    markers={viewerMarkers}
+                    renderMarker={renderMarker}
+                    onReady={(info) => {
+                      setToc(info.toc);
+                      setReady(true);
+                    }}
+                    onRelocate={onRelocate}
+                    onSelection={setSelection}
+                    onAddNote={(target) => { if (!archived) startNote(target); }}
+                    onToggleChrome={() => setChrome((c) => !c)}
+                    onError={onViewerError}
+                    onLoadProgress={setLoadFraction}
+                  />
+                )}
+                {url && book.format === "pdf" && (
+                  <PdfViewer
+                    key={`${url}-${attempt}`}
+                    ref={viewer}
+                    bookId={book.id}
+                    url={url}
+                    settings={settings}
+                    initialAnchor={initialAnchor}
+                    markers={viewerMarkers}
+                    renderMarker={renderMarker}
+                    onReady={(info) => {
+                      setToc(info.toc);
+                      setReady(true);
+                    }}
+                    onRelocate={onRelocate}
+                    onSelection={setSelection}
+                    onAddNote={(target) => { if (!archived) startNote(target); }}
+                    onToggleChrome={() => setChrome((c) => !c)}
+                    onError={onViewerError}
+                    onLoadProgress={setLoadFraction}
+                  />
+                )}
+                {!ready && (
+                  <div className="absolute inset-0 z-10 flex flex-col items-center justify-center gap-4" style={{ background: "var(--page)" }} role="status" aria-live="polite">
+                    <Spinner className="size-6" label="Opening the book" />
+                    <p className="text-sm text-ink-soft">{loadFraction !== null && loadFraction > 0 && loadFraction < 1 ? `Opening the book… ${Math.floor(loadFraction * 100)}%` : "Opening the book…"}</p>
+                  </div>
+                )}
+              </>
+            )}
+            <button type="button" onClick={() => viewer.current?.prev()} className="reader-turn reader-tool reader-turn-prev" aria-label="Previous page" disabled={!ready}>
+              <ChevronLeft className="size-5" aria-hidden />
+            </button>
+            <button type="button" onClick={() => viewer.current?.next()} className="reader-turn reader-tool reader-turn-next" aria-label="Next page" disabled={!ready}>
+              <ChevronRight className="size-5" aria-hidden />
+            </button>
+          </div>
         </main>
 
         <button type="button" className="reader-focus reader-tool" onClick={() => setChrome((c) => !c)} aria-label={chrome ? "Focus on the book" : "Show reading controls"} aria-pressed={!chrome}>
@@ -641,46 +654,30 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
 
         {selection && !composer && !archived && <SelectionToolbar selection={selection} onReact={(emoji) => void quickReact(selection, emoji)} onNote={() => startNote(selection)} />}
 
-        {/* ---------------------------------------------------------- bottom bar */}
-        <footer
+        {/* ---------------------------------------------------------- shared progress */}
+        <aside
+          aria-label="Reading progress"
           className={cn(
-            "reader-footer pb-safe absolute inset-x-0 bottom-0 z-20 transition-transform duration-300",
-            !chrome && "translate-y-full",
+            "reader-progress absolute z-20 flex flex-col items-center gap-2 transition-transform duration-300",
+            !chrome && "-translate-x-full",
           )}
+          inert={!chrome}
         >
-          <div className="mx-auto flex max-w-4xl items-center gap-1 px-1.5 pt-1 sm:gap-3 sm:px-4">
-            <button type="button" onClick={() => viewer.current?.prev()} className="flex size-11 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-sunk hover:text-ink" aria-label="Previous page">
-              <ChevronLeft className="size-5" aria-hidden />
-            </button>
-            <div className="min-w-0 flex-1">
-              <ProgressTrack members={trackMembers} meId={me.user_id} mode={mode} markers={trackMarkers} liveIds={readingNow} size="sm" />
-              <div className="-mt-1 flex items-center justify-between gap-2 px-3 pb-1 text-[11px] text-ink-faint">
-                <span className="flex min-w-0 items-center gap-1.5">
-                  <span className="tabular-nums text-ink-soft">{formatPercent(progressNow)}</span>
-                  {aheadCount > 0 && <span className="truncate">· {plural(aheadCount, "thing")} waiting ahead</span>}
-                </span>
-                <span className="flex shrink-0 items-center gap-1.5">
-                  {saveStatus === "error" && (
-                    <span className="flex items-center gap-1 text-danger" role="status">
-                      <WifiOff className="size-3" aria-hidden />
-                      Place not saved yet — retrying
-                    </span>
-                  )}
-                  {saveStatus !== "error" && liveStatus === "offline" && (
-                    <span className="flex items-center gap-1" role="status">
-                      <WifiOff className="size-3" aria-hidden />
-                      Reconnecting
-                    </span>
-                  )}
-                  {readingNow.size > 1 && saveStatus !== "error" && liveStatus !== "offline" && <span>{plural(readingNow.size - 1, "friend")} reading now</span>}
-                </span>
-              </div>
-            </div>
-            <button type="button" onClick={() => viewer.current?.next()} className="flex size-11 shrink-0 items-center justify-center rounded-full text-ink-soft hover:bg-sunk hover:text-ink" aria-label="Next page">
-              <ChevronRight className="size-5" aria-hidden />
-            </button>
-          </div>
-        </footer>
+          <span className="text-[11px] tabular-nums text-ink-soft">{formatPercent(progressNow)}</span>
+          <ProgressTrack members={trackMembers} meId={me.user_id} mode={mode} markers={trackMarkers} liveIds={readingNow} size="sm" orientation="vertical" className="flex-1" />
+          <Popover>
+            <PopoverTrigger className="reader-tool" aria-label="Reading status">
+              {saveStatus === "error" || liveStatus === "offline" ? <WifiOff className="size-4 text-danger" aria-hidden /> : <BookOpenCheck className="size-4" aria-hidden />}
+            </PopoverTrigger>
+            <PopoverContent side="right" className="w-64 text-sm text-ink-soft">
+              <p>{formatPercent(progressNow)} through the book</p>
+              {aheadCount > 0 && <p className="mt-2">{plural(aheadCount, "thing")} waiting ahead</p>}
+              {readingNow.size > 1 && <p className="mt-2">{plural(readingNow.size - 1, "friend")} reading now</p>}
+              <p className="mt-2">{saveStatus === "error" ? "Place not saved yet — retrying" : liveStatus === "offline" ? "Reconnecting" : "Your place saves as you read."}</p>
+            </PopoverContent>
+          </Popover>
+          {(saveStatus === "error" || liveStatus === "offline") && <span role="status" className="reader-connection rounded-lg border border-line bg-raised px-3 py-2 text-xs text-ink-soft shadow-soft">{saveStatus === "error" ? "Place not saved yet — retrying" : "Reconnecting"}</span>}
+        </aside>
 
         {/* ---------------------------------------------------------- panels */}
         <Sheet open={panel === "toc"} onOpenChange={(open) => !open && setPanel(null)}>

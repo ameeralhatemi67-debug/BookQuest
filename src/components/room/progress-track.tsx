@@ -30,17 +30,17 @@ interface TrackMember extends RoomMember {
   progress: number;
 }
 
-function useElementWidth<T extends HTMLElement>(): [React.RefObject<T | null>, number] {
+function useElementLength<T extends HTMLElement>(vertical: boolean): [React.RefObject<T | null>, number] {
   const ref = useRef<T | null>(null);
   const [width, setWidth] = useState(0);
   useEffect(() => {
     const element = ref.current;
     if (!element) return;
-    const observer = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width));
+    const observer = new ResizeObserver(([entry]) => setWidth(vertical ? entry.contentRect.height : entry.contentRect.width));
     observer.observe(element);
-    setWidth(element.getBoundingClientRect().width);
+    setWidth(vertical ? element.getBoundingClientRect().height : element.getBoundingClientRect().width);
     return () => observer.disconnect();
-  }, []);
+  }, [vertical]);
   return [ref, width];
 }
 
@@ -86,12 +86,14 @@ function Cluster({
   mode,
   liveIds,
   avatarSize,
+  vertical,
 }: {
   cluster: TrackCluster<TrackMember>;
   meId: string;
   mode: RoomMode;
   liveIds: Set<string>;
   avatarSize: number;
+  vertical: boolean;
 }) {
   // Draw the viewer last so they sit on top of a stack; cap what is drawn.
   const ordered = [...cluster.readers].sort((a, b) => Number(a.id === meId) - Number(b.id === meId));
@@ -105,13 +107,13 @@ function Cluster({
   return (
     <div
       role="listitem"
-      className="absolute top-1/2 -translate-x-1/2 -translate-y-1/2 transition-[left] duration-700 ease-[cubic-bezier(0.2,0.7,0.2,1)]"
-      style={{ left: `${clamp01(cluster.center) * 100}%` }}
+      className={cn("absolute -translate-x-1/2 -translate-y-1/2 duration-700 ease-out", vertical ? "left-1/2 transition-[top]" : "top-1/2 transition-[left]")}
+      style={vertical ? { top: `${clamp01(cluster.center) * 100}%` } : { left: `${clamp01(cluster.center) * 100}%` }}
     >
       <Popover>
         <PopoverTrigger
           aria-label={label}
-          className="group/cluster flex items-center rounded-full p-1 focus-visible:outline-offset-0"
+          className={cn("group/cluster flex items-center rounded-full p-1 focus-visible:outline-offset-0", vertical && "flex-col")}
           // Generous touch target even for a single small avatar.
           style={{ minWidth: 44, minHeight: 44, justifyContent: "center" }}
         >
@@ -131,7 +133,7 @@ function Cluster({
                 className={cn(
                   "relative rounded-full transition-[margin] duration-300 ease-out",
                   // Overlap when stacked; fan out on hover / keyboard focus.
-                  (index > 0 || hidden > 0) && "-ml-3 group-hover/cluster:-ml-0.5 group-focus-visible/cluster:-ml-0.5",
+                  (index > 0 || hidden > 0) && (vertical ? "-mt-5 group-hover/cluster:-mt-3 group-focus-visible/cluster:-mt-3" : "-ml-3 group-hover/cluster:-ml-0.5 group-focus-visible/cluster:-ml-0.5"),
                   isMe && "z-10",
                 )}
               >
@@ -146,7 +148,7 @@ function Cluster({
             );
           })}
         </PopoverTrigger>
-        <PopoverContent side="top" className="w-72 p-3">
+        <PopoverContent side={vertical ? "right" : "top"} className="w-72 p-3">
           <ul>
             {[...cluster.readers].reverse().map((member) => (
               <ReaderLine key={member.id} member={member} mode={mode} isMe={member.id === meId} live={liveIds.has(member.id)} />
@@ -165,6 +167,7 @@ export function ProgressTrack({
   markers = [],
   liveIds,
   size = "lg",
+  orientation = "horizontal",
   className,
 }: {
   members: RoomMember[];
@@ -173,9 +176,11 @@ export function ProgressTrack({
   markers?: TrackMarker[];
   liveIds?: Set<string>;
   size?: "sm" | "lg";
+  orientation?: "horizontal" | "vertical";
   className?: string;
 }) {
-  const [railRef, width] = useElementWidth<HTMLDivElement>();
+  const vertical = orientation === "vertical";
+  const [railRef, width] = useElementLength<HTMLDivElement>(vertical);
   const avatarSize = size === "lg" ? 36 : 26;
   const live = useMemo(() => liveIds ?? new Set<string>(), [liveIds]);
 
@@ -186,19 +191,19 @@ export function ProgressTrack({
   const mine = clamp01(me?.furthest ?? 0);
 
   return (
-    <div className={cn("w-full select-none", className)}>
-      <div className={cn("flex items-center", size === "lg" ? "gap-3" : "gap-2")}>
+    <div data-orientation={orientation} className={cn("w-full select-none", vertical && "h-full min-h-0", className)}>
+      <div className={cn("flex items-center", vertical && "h-full flex-col", size === "lg" ? "gap-3" : "gap-2")}>
         {size === "lg" && <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">Start</span>}
 
-        {/* Horizontal padding keeps avatars at 0% and 100% inside the component. */}
-        <div className="relative flex-1" style={{ height: avatarSize + 20, paddingInline: avatarSize / 2 }}>
-          <div ref={railRef} role="list" aria-label="Where everyone is in the book" className="relative h-full">
+        {/* End padding keeps avatars at 0% and 100% inside the component. */}
+        <div className="relative min-h-0 flex-1" style={vertical ? { width: avatarSize + 20, paddingBlock: 22 } : { height: avatarSize + 20, paddingInline: avatarSize / 2 }}>
+          <div ref={railRef} role="list" aria-label="Where everyone is in the book" className="relative h-full w-full">
             {/* rail */}
-            <div className={cn("absolute inset-x-0 top-1/2 -translate-y-1/2 rounded-full bg-line", size === "lg" ? "h-1.5" : "h-1")} aria-hidden />
+            <div className={cn("absolute rounded-full bg-line", vertical ? "inset-y-0 left-1/2 w-1 -translate-x-1/2" : "inset-x-0 top-1/2 -translate-y-1/2", !vertical && (size === "lg" ? "h-1.5" : "h-1"))} aria-hidden />
             {/* the part of the book the viewer has read */}
             <div
-              className={cn("absolute left-0 top-1/2 -translate-y-1/2 rounded-full bg-accent/70 transition-[width] duration-700 ease-out", size === "lg" ? "h-1.5" : "h-1")}
-              style={{ width: `${mine * 100}%` }}
+              className={cn("absolute rounded-full bg-accent/70 duration-700 ease-out", vertical ? "left-1/2 top-0 w-1 -translate-x-1/2 transition-[height]" : "left-0 top-1/2 -translate-y-1/2 transition-[width]", !vertical && (size === "lg" ? "h-1.5" : "h-1"))}
+              style={vertical ? { height: `${mine * 100}%` } : { width: `${mine * 100}%` }}
               aria-hidden
             />
             {/* things left along the way — neutral marks, never content */}
@@ -206,16 +211,16 @@ export function ProgressTrack({
               <span
                 key={marker.id}
                 aria-hidden
-                className={cn("absolute size-1.5 -translate-x-1/2 animate-marker-in rounded-full", size === "lg" ? "top-[calc(50%+11px)]" : "top-[calc(50%+7px)]")}
+                className={cn("absolute size-1.5 animate-marker-in rounded-full", vertical ? "left-[calc(50%+7px)] -translate-y-1/2" : "-translate-x-1/2", !vertical && (size === "lg" ? "top-[calc(50%+11px)]" : "top-[calc(50%+7px)]"))}
                 style={{
-                  left: `${clamp01(marker.position) * 100}%`,
+                  ...(vertical ? { top: `${clamp01(marker.position) * 100}%` } : { left: `${clamp01(marker.position) * 100}%` }),
                   background: marker.open ? `oklch(0.62 0.12 ${personHue(marker.authorId)})` : "transparent",
                   boxShadow: marker.open ? undefined : `inset 0 0 0 1.5px oklch(0.62 0.1 ${personHue(marker.authorId)})`,
                 }}
               />
             ))}
             {clusters.map((cluster) => (
-              <Cluster key={cluster.readers.map((r) => r.id).join("+")} cluster={cluster} meId={meId} mode={mode} liveIds={live} avatarSize={avatarSize} />
+              <Cluster key={cluster.readers.map((r) => r.id).join("+")} cluster={cluster} meId={meId} mode={mode} liveIds={live} avatarSize={avatarSize} vertical={vertical} />
             ))}
           </div>
         </div>

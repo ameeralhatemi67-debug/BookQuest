@@ -36,7 +36,7 @@ test("fits small phones, tablets, landscape phones and laptops", async () => {
   }
   await page.screenshot({ path: "test-results/reader-desktop.png" });
   await page.setViewportSize({ width: 390, height: 844 });
-  await expect.poll(() => page.frameLocator("main iframe").locator("body").evaluate((body) => parseFloat(getComputedStyle(body).columnWidth))).toBeLessThanOrEqual(390);
+  await expect.poll(() => page.frameLocator("main iframe").locator("body").evaluate((body) => parseFloat(getComputedStyle(body).columnWidth)).catch(() => Infinity)).toBeLessThanOrEqual(390);
   await page.screenshot({ path: "test-results/reader-mobile.png" });
 });
 

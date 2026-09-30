@@ -85,12 +85,12 @@ test("zooming keeps the reader on the same page", async () => {
   const width = async () => (await page.locator("[data-page]").first().boundingBox())!.width;
   const initial = await width();
 
-  await page.getByRole("button", { name: "Reading settings" }).click();
   await page.getByRole("button", { name: "Increase zoom" }).click();
   await page.getByRole("button", { name: "Increase zoom" }).click();
   await expect.poll(width).toBeGreaterThan(initial * 1.24);
   await expect(label(page)).toHaveText(before!);
 
+  await page.getByRole("button", { name: "Reading settings" }).click();
   await page.getByRole("button", { name: "Full page", exact: true }).click();
   await expect.poll(width).toBeCloseTo(initial, -1);
   await expect(label(page)).toHaveText(before!);
@@ -147,7 +147,6 @@ test("the highlight stays on its passage when the page is re-rendered at another
     return { x: (h.x - p.x) / p.width, y: (h.y - p.y) / p.height, w: h.width / p.width };
   };
   const before = await relative();
-  await page.getByRole("button", { name: "Reading settings" }).click();
   await page.getByRole("button", { name: "Increase zoom" }).click();
   await page.keyboard.press("Escape");
   await page.waitForTimeout(600);
@@ -181,7 +180,10 @@ test("another reader sees the note locked, then unlocked on reaching its page", 
 
   await openReader(reader, roomId);
   await expect(label(reader)).toHaveText("Page 1 of 24");
+  await reader.getByRole("button", { name: "Reading status" }).press("Enter");
   await expect(reader.getByText("1 thing waiting ahead")).toBeVisible();
+  await reader.keyboard.press("Escape");
+  await expect(reader.getByRole("button", { name: "Reading status" })).toBeFocused();
 
   await reader.locator('[aria-label="Book pages"]').focus();
   const status = reader.getByRole("status").filter({ hasText: "Petra left something here" });
