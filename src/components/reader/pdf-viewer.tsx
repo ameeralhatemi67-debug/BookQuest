@@ -9,8 +9,10 @@ import type { PDFDocumentLoadingTask, PDFDocumentProxy, RenderTask } from "pdfjs
 import { forwardRef, memo, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { personHue } from "@/components/ui/avatar";
 import { loadPdfJs, openPdfUrl } from "@/lib/books/pdf";
+import { pdfLayout } from "@/lib/books/pdf-layout";
 import { isPdfAnchor, mergeLineRects, normalizeRect, pdfAnchorProgress, pdfLabel, pdfViewState, type NormRect, type PdfAnchor } from "@/lib/location";
 import { ReaderError, type TocItem, type ViewerHandle, type ViewerMarker, type ViewerProps, type ViewerSelection } from "./types";
+import { bindDoubleTap } from "./double-tap";
 
 const PAGE_GAP = 16;
 const MAX_CANVAS_PIXELS = 12_000_000; // keeps memory sane on phones at high zoom
@@ -25,6 +27,7 @@ interface PageProps {
   doc: PDFDocumentProxy;
   pageNumber: number;
   top: number;
+  left: number;
   width: number;
   height: number;
   scale: number;
@@ -33,7 +36,7 @@ interface PageProps {
 }
 
 /** One rendered page: canvas underneath, invisible selectable text on top. */
-const PdfPage = memo(function PdfPage({ doc, pageNumber, top, width, height, scale, onSize, children }: PageProps) {
+const PdfPage = memo(function PdfPage({ doc, pageNumber, top, left, width, height, scale, onSize, children }: PageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
@@ -93,8 +96,8 @@ const PdfPage = memo(function PdfPage({ doc, pageNumber, top, width, height, sca
   return (
     <div
       data-page={pageNumber}
-      className="pdf-page absolute left-1/2 -translate-x-1/2 bg-[var(--page)] shadow-soft"
-      style={{ top, width, height }}
+      className="pdf-page absolute bg-[var(--page)] shadow-soft"
+      style={{ top, left, width, height, touchAction: "manipulation" }}
       aria-label={`Page ${pageNumber}`}
       role="group"
     >
@@ -122,21 +125,22 @@ function HighlightRects({ rects, hue }: { rects: NormRect[]; hue: number }) {
 }
 
 export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewer(
-  { url, settings, initialAnchor, markers, renderMarker, onReady, onRelocate, onSelection, onError, onLoadProgress },
+  { url, settings, initialAnchor, markers, renderMarker, onReady, onRelocate, onSelection, onAddNote, onError, onLoadProgress },
   ref,
 ) {
   const scroller = useRef<HTMLDivElement>(null);
   const [doc, setDoc] = useState<PDFDocumentProxy | null>(null);
   const [baseSize, setBaseSize] = useState<Size | null>(null);
   const [sizes, setSizes] = useState<Map<number, Size>>(new Map());
-  const [containerWidth, setContainerWidth] = useState(0);
+  const [container, setContainer] = useState({ width: 0, height: 0 });
   const [range, setRange] = useState<[number, number]>([1, 2]);
-  const callbacks = useRef({ onReady, onRelocate, onSelection, onError, onLoadProgress });
+  const callbacks = useRef({ onReady, onRelocate, onSelection, onAddNote, onError, onLoadProgress });
   const restored = useRef(false);
   const pendingAnchor = useRef<PdfAnchor | null>(isPdfAnchor(initialAnchor) ? initialAnchor : null);
+  const currentAnchor = useRef<PdfAnchor | null>(null);
 
   useLayoutEffect(() => {
-    callbacks.current = { onReady, onRelocate, onSelection, onError, onLoadProgress };
+    callbacks.current = { onReady, onRelocate, onSelection, onAddNote, onError, onLoadProgress };
   });
 
   // ------------------------------------------------------------ open the document
@@ -199,32 +203,15 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
   useEffect(() => {
     const element = scroller.current;
     if (!element) return;
-    const observer = new ResizeObserver(() => setContainerWidth(element.clientWidth));
+    const measure = () => setContainer(current => current.width === element.clientWidth && current.height === element.clientHeight ? current : { width: element.clientWidth, height: element.clientHeight });
+    const observer = new ResizeObserver(measure);
     observer.observe(element);
-    setContainerWidth(element.clientWidth);
+    measure();
     return () => observer.disconnect();
   }, []);
 
   const pageCount = doc?.numPages ?? 0;
-  const gutter = containerWidth < 640 ? 8 : 40;
-  // zoom 1 = fit the page to the available width (capped so a wide monitor does not blow pages up).
-  const fitWidth = Math.min(Math.max(200, containerWidth - gutter * 2), 980);
-  const scale = baseSize ? (fitWidth / baseSize.width) * settings.zoom : 1;
-
-  const layout = useMemo(() => {
-    const tops: number[] = [];
-    const heights: number[] = [];
-    const widths: number[] = [];
-    let y = PAGE_GAP;
-    for (let page = 1; page <= pageCount; page++) {
-      const size = sizes.get(page) ?? baseSize ?? { width: 612, height: 792 };
-      tops.push(y);
-      heights.push(size.height * scale);
-      widths.push(size.width * scale);
-      y += size.height * scale + PAGE_GAP;
-    }
-    return { tops, heights, widths, total: y };
-  }, [pageCount, sizes, baseSize, scale]);
+  const layout = useMemo(() => pdfLayout(Array.from({ length: pageCount }, (_, index) => sizes.get(index + 1) ?? baseSize ?? { width: 612, height: 792 }), container.width, container.height, settings.zoom), [pageCount, sizes, baseSize, container, settings.zoom]);
   const layoutRef = useRef(layout);
   useLayoutEffect(() => {
     layoutRef.current = layout;
@@ -232,20 +219,21 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
 
   const onSize = useCallback((pageNumber: number, size: Size) => {
     setSizes((current) => {
-      const known = current.get(pageNumber);
+      const known = current.get(pageNumber) ?? baseSize;
       if (known && Math.abs(known.width - size.width) < 0.5 && Math.abs(known.height - size.height) < 0.5) return current;
       const next = new Map(current);
       next.set(pageNumber, size);
       return next;
     });
-  }, []);
+  }, [baseSize]);
 
   // ------------------------------------------------------------ scroll → location
   const report = useCallback(() => {
     const element = scroller.current;
     const { tops, heights } = layoutRef.current;
     if (!element || tops.length === 0) return;
-    const state = pdfViewState({ pageTops: tops, pageHeights: heights, scrollTop: element.scrollTop, viewportHeight: element.clientHeight });
+    const inset = layoutRef.current.fitted ? PAGE_GAP : 0;
+    const state = pdfViewState({ pageTops: tops, pageHeights: heights, scrollTop: element.scrollTop + inset, viewportHeight: element.clientHeight - inset });
 
     // Which pages intersect the viewport (plus overscan)?
     const bottom = element.scrollTop + element.clientHeight;
@@ -255,11 +243,12 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
     setRange((current) => (current[0] === next[0] && current[1] === next[1] ? current : next));
 
     if (!restored.current) return; // don't report the pre-restore position as progress
+    currentAnchor.current = { type: "pdf", page: state.page, y: Math.round(state.offset * 10000) / 10000 };
     callbacks.current.onRelocate({
       progress: state.progress,
       reach: state.reach,
       label: pdfLabel(state.page, tops.length),
-      anchor: { type: "pdf", page: state.page, y: Math.round(state.offset * 10000) / 10000 },
+      anchor: currentAnchor.current,
       chapterIndex: null,
       chapterLabel: null,
       page: state.page,
@@ -289,42 +278,27 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
     const element = scroller.current;
     const { tops, heights } = layoutRef.current;
     if (!element || tops.length === 0) return;
+    currentAnchor.current = anchor;
     const index = Math.min(Math.max(1, anchor.page), tops.length) - 1;
-    const y = anchor.rects?.length ? Math.min(...anchor.rects.map((r) => r.y)) : (anchor.y ?? 0);
+    const y = layoutRef.current.fitted ? 0 : anchor.rects?.length ? Math.min(...anchor.rects.map((r) => r.y)) : (anchor.y ?? 0);
     // A highlight is shown with a little context above it; a resume point is restored exactly.
-    const context = anchor.rects?.length ? Math.min(120, element.clientHeight * 0.25) : 0;
-    element.scrollTo({ top: Math.max(0, tops[index] + y * heights[index] - context), behavior });
+    const context = !layoutRef.current.fitted && anchor.rects?.length ? Math.min(120, element.clientHeight * 0.25) : 0;
+    element.scrollTo({ top: Math.max(0, tops[index] - (layoutRef.current.fitted ? PAGE_GAP : 0) + y * heights[index] - context), behavior });
   }, []);
 
   // Restore the saved position once the layout exists; keep the place when zoom / width changes.
-  const anchorBeforeLayout = useRef<PdfAnchor | null>(null);
   useLayoutEffect(() => {
-    if (!doc || !baseSize || containerWidth === 0) return;
+    if (!doc || !baseSize || container.width === 0 || container.height === 0) return;
     if (!restored.current) {
       if (pendingAnchor.current) scrollToAnchor(pendingAnchor.current);
       restored.current = true;
       report();
       return;
     }
-    if (anchorBeforeLayout.current) {
-      scrollToAnchor(anchorBeforeLayout.current);
-      anchorBeforeLayout.current = null;
-    }
+    if (currentAnchor.current) scrollToAnchor(currentAnchor.current);
     report();
     // `layout` changes whenever scale or page sizes change.
-  }, [doc, baseSize, containerWidth, layout, report, scrollToAnchor]);
-
-  // Remember where we are right before a zoom / resize re-lays the pages out.
-  useLayoutEffect(() => {
-    // The scroll container is the same element for the viewer's whole life.
-    const element = scroller.current;
-    return () => {
-      const { tops, heights } = layoutRef.current;
-      if (!element || tops.length === 0 || !restored.current) return;
-      const state = pdfViewState({ pageTops: tops, pageHeights: heights, scrollTop: element.scrollTop, viewportHeight: element.clientHeight });
-      anchorBeforeLayout.current = { type: "pdf", page: state.page, y: state.offset };
-    };
-  }, [scale, containerWidth]);
+  }, [doc, baseSize, container, layout, report, scrollToAnchor]);
 
   // ------------------------------------------------------------ selection → anchor
   useEffect(() => {
@@ -362,13 +336,26 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
         rect: { left: bounds.left, top: bounds.top, width: bounds.width, height: bounds.height },
       };
       callbacks.current.onSelection(result);
+      return result;
     };
     const onChange = () => {
       if (timer) clearTimeout(timer);
       timer = setTimeout(read, 220);
     };
     document.addEventListener("selectionchange", onChange);
+    const root = scroller.current;
+    const unbind = root ? bindDoubleTap(root, (event) => {
+      const pageElement = (event.target as Element | null)?.closest<HTMLElement>("[data-page]");
+      if (!pageElement) return;
+      const page = Number(pageElement.dataset.page);
+      const selected = read();
+      if (selected && isPdfAnchor(selected.anchor) && selected.anchor.page === page) return callbacks.current.onAddNote(selected);
+      const box = pageElement.getBoundingClientRect();
+      const anchor: PdfAnchor = { type: "pdf", page, x: Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)), y: Math.min(1, Math.max(0, (event.clientY - box.top) / box.height)) };
+      callbacks.current.onAddNote({ anchor, position: pdfAnchorProgress(anchor, layoutRef.current.tops.length), label: pdfLabel(page, layoutRef.current.tops.length), quote: null, rect: null });
+    }) : undefined;
     return () => {
+      unbind?.();
       document.removeEventListener("selectionchange", onChange);
       if (timer) clearTimeout(timer);
     };
@@ -379,6 +366,13 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
     const element = scroller.current;
     if (!element) return;
     const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const { tops, heights, columns, fitted } = layoutRef.current;
+    if (fitted && tops.length) {
+      const state = pdfViewState({ pageTops: tops, pageHeights: heights, scrollTop: element.scrollTop + PAGE_GAP, viewportHeight: element.clientHeight });
+      const index = Math.min(tops.length - 1, Math.max(0, state.page - 1 + direction * columns));
+      element.scrollTo({ top: tops[index] - PAGE_GAP, behavior: "auto" });
+      return;
+    }
     element.scrollBy({ top: direction * element.clientHeight * 0.88, behavior: smooth ? "smooth" : "auto" });
   }, []);
 
@@ -448,14 +442,14 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
   if (doc) for (let page = range[0]; page <= Math.min(range[1], pageCount); page++) pages.push(page);
 
   return (
-    <div ref={scroller} className="scroll-slim h-full w-full overflow-y-auto overflow-x-auto overscroll-contain" tabIndex={0} aria-label="Book pages">
-      <div className="relative mx-auto" style={{ height: layout.total, minWidth: Math.max(...(layout.widths.length ? [layout.widths[0] + gutter * 2] : [0])) }}>
+    <div ref={scroller} className="scroll-slim h-full w-full overflow-y-auto overflow-x-auto overscroll-contain" style={{ overflowAnchor: "none" }} tabIndex={0} aria-label="Book pages">
+      <div className="relative mx-auto" style={{ height: layout.total, width: layout.width }}>
         {doc &&
           pages.map((page) => {
             const pageMarkers = markersByPage.get(page) ?? [];
             let lastTop = -1;
             return (
-              <PdfPage key={page} doc={doc} pageNumber={page} top={layout.tops[page - 1]} width={layout.widths[page - 1]} height={layout.heights[page - 1]} scale={scale} onSize={onSize}>
+              <PdfPage key={page} doc={doc} pageNumber={page} top={layout.tops[page - 1]} left={layout.lefts[page - 1]} width={layout.widths[page - 1]} height={layout.heights[page - 1]} scale={layout.scales[page - 1]} onSize={onSize}>
                 {pageMarkers.map((marker) => {
                   const anchor = marker.anchor as PdfAnchor;
                   const y = anchor.rects?.length ? anchor.rects[0].y : (anchor.y ?? 0);

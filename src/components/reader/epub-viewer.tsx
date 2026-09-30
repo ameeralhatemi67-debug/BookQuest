@@ -13,6 +13,7 @@ import { epubLabel, epubProgress, epubReach, isEpubAnchor, type EpubAnchor } fro
 import { getSupabase } from "@/lib/supabase/client";
 import { personHue } from "@/components/ui/avatar";
 import { FONT_STACK, ReaderError, THEME_COLORS, WIDTH_PX, type ReaderSettings, type TocItem, type ViewerHandle, type ViewerProps, type ViewerSelection } from "./types";
+import { bindDoubleTap } from "./double-tap";
 
 const BOOK_CACHE = "marginalia-books-v1";
 
@@ -72,7 +73,7 @@ function settingsCss(settings: ReaderSettings): string {
   // In sepia / dark, books that hard-code black text or white boxes would be unreadable.
   const recolor = settings.theme === "light" ? "" : `body * { color: inherit !important; background-color: transparent !important; }`;
   return `
-    html { background: transparent !important; }
+    html { background: transparent !important; touch-action: manipulation; }
     body {
       background: transparent !important;
       color: ${colors.ink} !important;
@@ -101,13 +102,13 @@ interface EpubInternals {
 }
 
 export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number | null; hasLocations: boolean; locationsPath: string }>(function EpubViewer(
-  { bookId, url, settings, initialAnchor, markers, renderMarker, onReady, onRelocate, onSelection, onToggleChrome, onError, onLoadProgress, size, hasLocations, locationsPath },
+  { bookId, url, settings, initialAnchor, markers, renderMarker, onReady, onRelocate, onSelection, onAddNote, onToggleChrome, onError, onLoadProgress, size, hasLocations, locationsPath },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
   const internals = useRef<EpubInternals | null>(null);
-  const callbacks = useRef({ onReady, onRelocate, onSelection, onToggleChrome, onError, onLoadProgress });
+  const callbacks = useRef({ onReady, onRelocate, onSelection, onAddNote, onToggleChrome, onError, onLoadProgress });
   const settingsRef = useRef(settings);
   const highlighted = useRef(new Map<string, string>()); // marker id → cfiRange
   const [ready, setReady] = useState(false);
@@ -115,7 +116,7 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
   const [layoutTick, setLayoutTick] = useState(0);
 
   useLayoutEffect(() => {
-    callbacks.current = { onReady, onRelocate, onSelection, onToggleChrome, onError, onLoadProgress };
+    callbacks.current = { onReady, onRelocate, onSelection, onAddNote, onToggleChrome, onError, onLoadProgress };
   });
 
   // ------------------------------------------------------------ open the book
@@ -125,6 +126,7 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
     let rendition: Rendition | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const gestureCleanups: (() => void)[] = [];
     const highlights = highlighted.current;
 
     (async () => {
@@ -205,9 +207,50 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
       };
 
       // ---- per-document set-up (runs for every chapter iframe)
+      const selectionFromRange = (range: Range, contents: Contents): ViewerSelection => {
+        const quote = range.toString().replace(/\s+/g, " ").trim();
+        const start = range.cloneRange();
+        start.collapse(true);
+        const cfi = contents.cfiFromRange(start);
+        const position = epubProgress(Number(book!.locations.locationFromCfi(cfi)), total);
+        const rect = range.getBoundingClientRect();
+        const frameRect = (contents.window.frameElement as HTMLElement | null)?.getBoundingClientRect();
+        const chapter = state.location ? chapterAt(state.location.start.index) : null;
+        return {
+          anchor: { type: "epub", cfi, ...(quote ? { cfiRange: contents.cfiFromRange(range) } : {}), href: state.location?.start.href },
+          position, label: epubLabel(chapter?.label, position), quote: quote ? quote.slice(0, 1200) : null,
+          rect: quote && frameRect ? { left: rect.left + frameRect.left, top: rect.top + frameRect.top, width: rect.width, height: rect.height } : null,
+        };
+      };
       rendition.hooks.content.register((contents: Contents) => {
         void contents.addStylesheetCss(settingsCss(settingsRef.current), "reader-settings");
         const doc = contents.document;
+        gestureCleanups.push(bindDoubleTap(doc, (event) => {
+          try {
+            const selected = doc.getSelection();
+            let range = selected && !selected.isCollapsed && selected.rangeCount ? selected.getRangeAt(0) : null;
+            if (!range) {
+              const caretDoc = doc as Document & { caretRangeFromPoint?(x: number, y: number): Range | null };
+              const caret = doc.caretPositionFromPoint?.(event.clientX, event.clientY);
+              range = caretDoc.caretRangeFromPoint?.(event.clientX, event.clientY) ?? doc.createRange();
+              if (caret) { range.setStart(caret.offsetNode, caret.offset); range.collapse(true); }
+              else if (!range.startContainer.parentElement) { range.selectNodeContents(event.target as Node); range.collapse(true); }
+            }
+            callbacks.current.onAddNote(selectionFromRange(range, contents));
+          } catch {
+            const location = state.location;
+            if (location) callbacks.current.onAddNote({ anchor: { type: "epub", cfi: location.start.cfi, href: location.start.href }, position: epubProgress(location.start.location, total), label: epubLabel(chapterAt(location.start.index)?.label, epubProgress(location.start.location, total)), quote: null, rect: null });
+          }
+        }, (event) => {
+          if (!doc.getSelection()?.isCollapsed || disposed) return;
+          const container = host.current?.getBoundingClientRect();
+          const frameRect = (contents.window.frameElement as HTMLElement | null)?.getBoundingClientRect();
+          if (!container || !frameRect) return;
+          const zone = (event.clientX + frameRect.left - container.left) / container.width;
+          if (zone < 0.22) void rendition!.prev();
+          else if (zone > 0.78) void rendition!.next();
+          else callbacks.current.onToggleChrome();
+        }));
 
         // Swipe to turn the page.
         let touch: { x: number; y: number; t: number } | null = null;
@@ -251,43 +294,11 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
 
       rendition.on("selected", (cfiRange: string, contents: Contents) => {
         try {
-          const range = contents.range(cfiRange);
-          const quote = range.toString().replace(/\s+/g, " ").trim();
-          if (!quote) return;
-          const start = range.cloneRange();
-          start.collapse(true);
-          const startCfi = contents.cfiFromRange(start);
-          const index = Number(book!.locations.locationFromCfi(startCfi));
-          const rect = range.getBoundingClientRect();
-          const frameRect = (contents.window.frameElement as HTMLElement | null)?.getBoundingClientRect();
-          const chapter = state.location ? chapterAt(state.location.start.index) : null;
-          const position = epubProgress(index, total);
-          const selection: ViewerSelection = {
-            anchor: { type: "epub", cfi: startCfi, cfiRange, href: state.location?.start.href },
-            position,
-            label: epubLabel(chapter?.label, position),
-            quote: quote.slice(0, 1200),
-            rect: frameRect ? { left: rect.left + frameRect.left, top: rect.top + frameRect.top, width: rect.width, height: rect.height } : null,
-          };
-          callbacks.current.onSelection(selection);
+          const selection = selectionFromRange(contents.range(cfiRange), contents);
+          if (selection.quote) callbacks.current.onSelection(selection);
         } catch {
           // A selection that cannot be turned into a CFI is simply ignored.
         }
-      });
-
-      // Tap zones: left / right edge turn the page, the middle toggles the controls.
-      rendition.on("click", (event: MouseEvent, contents: Contents) => {
-        const target = event.target as HTMLElement | null;
-        if (target?.closest("a[href]")) return;
-        if (!contents.document.getSelection()?.isCollapsed) return;
-        const container = host.current?.getBoundingClientRect();
-        const frameRect = (contents.window.frameElement as HTMLElement | null)?.getBoundingClientRect();
-        if (!container || !frameRect) return;
-        const x = event.clientX + frameRect.left - container.left;
-        const zone = x / container.width;
-        if (zone < 0.22) void rendition!.prev();
-        else if (zone > 0.78) void rendition!.next();
-        else callbacks.current.onToggleChrome();
       });
 
       rendition.on("keyup", (event: KeyboardEvent) => {
@@ -328,6 +339,7 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
 
     return () => {
       disposed = true;
+      gestureCleanups.forEach(cleanup => cleanup());
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver?.disconnect();
       internals.current = null;

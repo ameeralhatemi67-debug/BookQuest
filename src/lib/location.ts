@@ -144,7 +144,7 @@ export interface PdfViewState {
 }
 
 /** Locates a vertical scroll coordinate inside the page stack. */
-function locate(y: number, tops: number[], heights: number[]): { page: number; offset: number } {
+function locate(y: number, tops: number[], heights: number[], firstInRow = false): { page: number; offset: number } {
   const count = tops.length;
   if (count === 0) return { page: 1, offset: 0 };
   let index = 0;
@@ -153,13 +153,16 @@ function locate(y: number, tops: number[], heights: number[]): { page: number; o
   let hi = count - 1;
   while (lo <= hi) {
     const mid = (lo + hi) >> 1;
-    if (tops[mid] <= y) {
+    // Browsers round scrollTop to device pixels; a restored fractional page top
+    // must not become the preceding page just because it rounded down.
+    if (tops[mid] <= y + 0.5) {
       index = mid;
       lo = mid + 1;
     } else {
       hi = mid - 1;
     }
   }
+  if (firstInRow) while (index > 0 && tops[index - 1] === tops[index]) index--;
   const height = heights[index] || 1;
   return { page: index + 1, offset: clamp01((y - tops[index]) / height) };
 }
@@ -168,7 +171,7 @@ function locate(y: number, tops: number[], heights: number[]): { page: number; o
 export function pdfViewState(view: PdfViewport): PdfViewState {
   const total = view.pageTops.length;
   if (total === 0) return { page: 1, offset: 0, progress: 0, reach: 0 };
-  const top = locate(Math.max(0, view.scrollTop), view.pageTops, view.pageHeights);
+  const top = locate(Math.max(0, view.scrollTop), view.pageTops, view.pageHeights, true);
   const lastBottom = view.pageTops[total - 1] + view.pageHeights[total - 1];
   const bottomY = view.scrollTop + view.viewportHeight;
   // Within a couple of pixels of the end counts as the end (sub-pixel scroll rounding).

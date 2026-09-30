@@ -13,7 +13,7 @@ export interface ReaderSettings {
   lineHeight: number;
   width: ReaderWidth;
   font: ReaderFont;
-  /** PDF zoom, 1 = fit to width. */
+  /** PDF zoom: 1 = full page; 0.8 = two pages. */
   zoom: number;
 }
 
@@ -21,7 +21,7 @@ export const DEFAULT_SETTINGS: ReaderSettings = { theme: "light", fontSize: 110,
 
 export const FONT_SIZE = { min: 80, max: 180, step: 10 };
 export const LINE_HEIGHT = { min: 1.3, max: 2.1, step: 0.1 };
-export const ZOOM = { min: 0.6, max: 3, step: 0.2 };
+export const ZOOM = { min: 0.8, max: 3, step: 0.2 };
 export const WIDTH_PX: Record<ReaderWidth, number> = { narrow: 560, medium: 700, wide: 880 };
 
 export const FONT_STACK: Record<ReaderFont, string | null> = {
@@ -105,6 +105,7 @@ export interface ViewerProps {
   onReady(info: { toc: TocItem[]; pageCount?: number }): void;
   onRelocate(location: ViewerLocation): void;
   onSelection(selection: ViewerSelection | null): void;
+  onAddNote(selection: ViewerSelection): void;
   /** Draws one marker; the viewer decides where it goes (margin of its page). */
   renderMarker(marker: ViewerMarker): ReactNode;
   onToggleChrome(): void;

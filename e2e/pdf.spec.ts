@@ -91,7 +91,7 @@ test("zooming keeps the reader on the same page", async () => {
   await expect.poll(width).toBeGreaterThan(initial * 1.25);
   await expect(label(page)).toHaveText(before!);
 
-  await page.getByRole("button", { name: "Fit to width" }).click();
+  await page.getByRole("button", { name: "Full page", exact: true }).click();
   await expect.poll(width).toBeCloseTo(initial, -1);
   await expect(label(page)).toHaveText(before!);
   await page.keyboard.press("Escape");
@@ -156,7 +156,7 @@ test("the highlight stays on its passage when the page is re-rendered at another
   expect(after.y).toBeCloseTo(before.y, 2);
   expect(after.w).toBeCloseTo(before.w, 2);
   await page.getByRole("button", { name: "Reading settings" }).click();
-  await page.getByRole("button", { name: "Fit to width" }).click();
+  await page.getByRole("button", { name: "Full page", exact: true }).click();
   await page.keyboard.press("Escape");
 });
 

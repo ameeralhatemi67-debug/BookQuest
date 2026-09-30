@@ -1,7 +1,8 @@
 "use client";
 
-import { FileAudio, Film, ImagePlus, Link2, Mic, X } from "lucide-react";
+import { FileAudio, Film, ImagePlus, Link2, Mic, Pencil, X } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
+import { SketchPad } from "./sketch-pad";
 import { Button } from "@/components/ui/button";
 import { FormError, Input, Textarea } from "@/components/ui/field";
 import { SheetClose } from "@/components/ui/overlay";
@@ -22,6 +23,7 @@ export function NoteComposer({ selection, annotations, onDone }: { selection: Vi
   const [showLink, setShowLink] = useState(false);
   const [files, setFiles] = useState<File[]>([]);
   const [recording, setRecording] = useState(false);
+  const [drawing, setDrawing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<UploadingState | null>(null);
@@ -50,7 +52,7 @@ export function NoteComposer({ selection, annotations, onDone }: { selection: Vi
 
   async function submit(event: FormEvent) {
     event.preventDefault();
-    if (empty || busy) return;
+    if (empty || busy || drawing || recording) return;
     setBusy(true);
     setError(null);
     try {
@@ -162,6 +164,7 @@ export function NoteComposer({ selection, annotations, onDone }: { selection: Vi
           </div>
         )}
 
+        {drawing && <SketchPad onSave={(file) => { addFiles([file], "image"); setDrawing(false); }} onCancel={() => setDrawing(false)} />}
         <FormError>{error}</FormError>
 
         <div className="flex flex-wrap gap-1.5">
@@ -183,18 +186,19 @@ export function NoteComposer({ selection, annotations, onDone }: { selection: Vi
               }}
             />
           ))}
-          <Button variant="secondary" size="sm" disabled={busy} onClick={() => inputs.current.image?.click()} icon={<ImagePlus className="size-4" aria-hidden />}>
+          <Button variant="secondary" size="sm" disabled={busy || drawing} onClick={() => inputs.current.image?.click()} icon={<ImagePlus className="size-4" aria-hidden />}>
             Photo
           </Button>
+          <Button variant="secondary" size="sm" disabled={busy || drawing || recording || files.length >= MAX_FILES} onClick={() => setDrawing(true)} icon={<Pencil className="size-4" aria-hidden />}>Draw</Button>
           {canRecordVoice() && (
-            <Button variant="secondary" size="sm" disabled={busy || recording} onClick={() => setRecording(true)} icon={<Mic className="size-4" aria-hidden />}>
+            <Button variant="secondary" size="sm" disabled={busy || recording || drawing} onClick={() => setRecording(true)} icon={<Mic className="size-4" aria-hidden />}>
               Record
             </Button>
           )}
-          <Button variant="secondary" size="sm" disabled={busy} onClick={() => inputs.current.audio?.click()} icon={<FileAudio className="size-4" aria-hidden />}>
+          <Button variant="secondary" size="sm" disabled={busy || drawing} onClick={() => inputs.current.audio?.click()} icon={<FileAudio className="size-4" aria-hidden />}>
             Audio
           </Button>
-          <Button variant="secondary" size="sm" disabled={busy} onClick={() => inputs.current.video?.click()} icon={<Film className="size-4" aria-hidden />}>
+          <Button variant="secondary" size="sm" disabled={busy || drawing} onClick={() => inputs.current.video?.click()} icon={<Film className="size-4" aria-hidden />}>
             Video
           </Button>
           <Button variant={showLink ? "quiet" : "secondary"} size="sm" disabled={busy} onClick={() => setShowLink(!showLink)} icon={<Link2 className="size-4" aria-hidden />} aria-pressed={showLink}>
@@ -205,7 +209,7 @@ export function NoteComposer({ selection, annotations, onDone }: { selection: Vi
 
       <footer className="pb-safe border-t border-line px-5 pt-3">
         <p className="mb-2.5 text-xs leading-relaxed text-ink-faint">Friends who haven&apos;t read this far will only see that you left something here — not what.</p>
-        <Button type="submit" size="lg" className="w-full" loading={busy} disabled={empty || recording}>
+        <Button type="submit" size="lg" className="w-full" loading={busy} disabled={empty || recording || drawing}>
           {busy ? (uploading ? "Uploading…" : "Leaving it…") : "Leave it here"}
         </Button>
       </footer>

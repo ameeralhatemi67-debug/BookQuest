@@ -44,4 +44,6 @@ npx playwright test --project mobile
 
 Generated book fixtures, screenshots and traces are ignored by Git. Desktop specs cover Duo, five-reader Group, room visibility/RLS attacks, EPUB/PDF, large interrupted uploads, management, recovery and media. Mobile tests resize through eight viewports and exercise soundtrack cues and network recovery. The local large-upload check uses a generated 64 MB PDF and verifies its full stored SHA-256 hash; local limits intentionally exceed the hosted 50 MB cap.
 
+The reader-tools spec also creates desktop and touch-phone contexts for PDF and EPUB. It checks full-page / two-page PDF bounds, spread navigation, double-click / double-tap notes, drawing color and stroke size, and a saved 800 × 480 PNG reopening from its note link. The PDF regression checks cover selected passages, highlights after zoom, resume and spoiler unlocks. Try these gestures on physical Safari and Android devices too; long press and dragging should still select text rather than open a note.
+
 These suites create disposable local accounts and files. Do not point the acceptance suite at production with the local seed or run a remote database reset. Production checks should use a small number of clearly identified test accounts and remove only their own data afterward.

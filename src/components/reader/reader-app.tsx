@@ -141,10 +141,11 @@ function SettingsPanel({ settings, onChange, format }: { settings: ReaderSetting
         </>
       ) : (
         <>
-          <Stepper label="Zoom" value={settings.zoom} onChange={(zoom) => onChange({ zoom })} {...ZOOM} format={(v) => `${Math.round(v * 100)}%`} />
-          <button type="button" onClick={() => onChange({ zoom: 1 })} className="text-sm text-accent-ink underline-offset-4 hover:underline">
-            Fit to width
-          </button>
+          <Stepper label="Zoom" value={Math.max(ZOOM.min, settings.zoom)} onChange={(zoom) => onChange({ zoom })} {...ZOOM} format={(v) => v < 1 ? "2 pages" : `${Math.round(v * 100)}%`} />
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={() => onChange({ zoom: 1 })} aria-pressed={settings.zoom === 1}>Full page</Button>
+            <Button variant="secondary" size="sm" onClick={() => onChange({ zoom: ZOOM.min })} aria-pressed={settings.zoom < 1}>Two pages</Button>
+          </div>
         </>
       )}
     </div>
@@ -420,6 +421,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
     setSelection(null);
     setActiveNote(null);
     setPanel(null);
+    setChrome(true);
     setComposer(target);
   }, [saveNow]);
 
@@ -564,6 +566,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
                   }}
                   onRelocate={onRelocate}
                   onSelection={setSelection}
+                  onAddNote={(target) => { if (!archived) startNote(target); }}
                   onToggleChrome={() => setChrome((c) => !c)}
                   onError={onViewerError}
                   onLoadProgress={setLoadFraction}
@@ -585,6 +588,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
                   }}
                   onRelocate={onRelocate}
                   onSelection={setSelection}
+                  onAddNote={(target) => { if (!archived) startNote(target); }}
                   onToggleChrome={() => setChrome((c) => !c)}
                   onError={onViewerError}
                   onLoadProgress={setLoadFraction}

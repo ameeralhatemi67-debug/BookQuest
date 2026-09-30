@@ -8,19 +8,22 @@ Auth and alpha access; EPUB/PDF upload and reading; room privacy, invitations an
 
 The reader now has an adaptive paper/desk layout, warmer editorial typography, focus mode, light/sepia/dark settings, 44 px controls, responsive overlays and restrained interaction states. Fixed mobile EPUB resize clipping and offscreen PDF selection controls. The local launcher now exists and the emulator recovers partial upload offsets correctly.
 
+PDFs open as complete pages fitted to both window dimensions. Zoom out once from 100% for two pages side by side; Full page / Two pages presets are in Reading settings, and zoom in remains available. Desktop double-click and phone double-tap open a note at the tapped passage. Draw in the note composer offers color and stroke-size controls, then saves the sketch as a PNG through the existing private attachment and spoiler-lock flow.
+
 ## Hosted state
 
 Supabase is connected with committed migrations and private buckets. Vercel public variables and auth URLs/templates are configured. Direct signup is enabled with owner approval for this code-gated alpha. Two owner-designated admin accounts are active; private one-use setup links are kept outside Git. The friend code is limited to 20 uses and 30 days. The effective hosted file cap is 50 MB.
 
 ## Verification
 
-- Unit, database/RLS and emulator integration: **172 passing**.
+- Unit, database/RLS and emulator integration: **173 passing**.
 - TypeScript, ESLint and production build: clean.
 - **62 desktop browser cases and 7 mobile cases** passed across the local Chromium runs: Duo, Group, room visibility/authorization, PDF, upload, management, recovery, voice/video, responsive and soundtrack checks. See TESTING.md for reproducible commands.
 - The 64 MB local upload passes pause/resume, connection interruption, cancellation and full stored-file hash verification.
 - Mobile automation covers eight viewports from 320 px phones through 1440 px laptops, theme/focus controls, page cues, hide/show playback and reconnecting progress.
+- The subsequent reader-tools update passed 40 relevant browser cases: PDF zoom/highlights/resume, desktop and phone double-tap/drawing flows in both formats, Duo, and both responsive projects. No new library or database migration was needed.
 
-GitHub `main` and `alpha-build` were pushed with implementation commit `46c29b5`. Vercel production deployment `dpl_GS3ptdV4pvPfxpCnmVc1z7ZCP7Sw` is Ready and serves https://book-quest-ecru.vercel.app/.
+GitHub `main` and `alpha-build` feed the Vercel production pipeline at https://book-quest-ecru.vercel.app/. The initial hosted alpha was implementation commit `46c29b5`; the reader-tools update continues that deployment flow.
 
 The hosted smoke passed on 2026-09-30: two temporary readers signed up, uploaded an EPUB, created/joined a private room, opened the reader, played shared audio and used a 390 px phone layout without overflow. Realtime connected live. Temporary test accounts, rooms, books and Storage files were removed. A fresh friend code preserves all 20 signup places.
 
