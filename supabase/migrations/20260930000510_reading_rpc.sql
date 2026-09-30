@@ -129,6 +129,14 @@ begin
       where rp.room_id = p_room_id and rp.user_id <> v_uid
         and rp.furthest > v_old and rp.furthest < v_new and rp.furthest > 0
         and private.is_member_user(p_room_id, rp.user_id)
+        -- Two readers leap-frogging each other is one story, not twenty:
+        -- the same overtake is recorded at most once per half day.
+        and not exists (
+          select 1 from public.room_activity a
+          where a.room_id = p_room_id and a.actor_id = v_uid and a.type = 'passed'
+            and a.data ->> 'passed_user_id' = rp.user_id::text
+            and a.created_at > now() - interval '12 hours'
+        )
     loop
       perform private.log_activity(p_room_id, v_uid, 'passed', jsonb_build_object('passed_user_id', r.user_id));
     end loop;

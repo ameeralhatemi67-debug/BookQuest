@@ -100,7 +100,7 @@ function Cluster({
   const label =
     cluster.readers.length === 1
       ? describe(cluster.readers[0], mode, cluster.readers[0].id === meId, liveIds.has(cluster.readers[0].id))
-      : `${cluster.readers.length} readers here: ${cluster.readers.map((r) => r.display_name).join(", ")}`;
+      : `${cluster.readers.length} readers here: ${cluster.readers.map((r) => `${r.display_name}${liveIds.has(r.id) ? " (reading now)" : ""}`).join(", ")}`;
 
   return (
     <div

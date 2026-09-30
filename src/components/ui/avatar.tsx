@@ -26,6 +26,7 @@ export function Avatar({
   className,
   ring,
   live,
+  announce,
   style,
 }: {
   person: AvatarPerson;
@@ -35,6 +36,8 @@ export function Avatar({
   ring?: boolean;
   /** Show the "reading right now" dot. */
   live?: boolean;
+  /** Read the person's name to screen readers. Off by default: almost everywhere the name is printed next to the avatar. */
+  announce?: boolean;
   style?: CSSProperties;
 }) {
   const url = avatarUrl(person.avatar_path);
@@ -68,7 +71,7 @@ export function Avatar({
           <span className="size-2 animate-breathe rounded-full bg-moss" />
         </span>
       )}
-      <span className="sr-only">{person.display_name}{live ? " (reading now)" : ""}</span>
+      {announce && <span className="sr-only">{person.display_name}{live ? " (reading now)" : ""}</span>}
     </span>
   );
 }
@@ -80,7 +83,7 @@ export function AvatarStack({ people, size = 28, max = 5, className }: { people:
   return (
     <span className={cn("inline-flex items-center", className)}>
       {shown.map((person, index) => (
-        <Avatar key={person.id} person={person} size={size} ring style={{ marginLeft: index === 0 ? 0 : -size * 0.3 }} />
+        <Avatar key={person.id} person={person} size={size} ring announce style={{ marginLeft: index === 0 ? 0 : -size * 0.3 }} />
       ))}
       {extra > 0 && (
         <span

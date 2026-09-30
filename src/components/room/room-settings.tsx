@@ -105,7 +105,7 @@ function SettingsBody({ room, onClose, onChanged }: { room: RoomDetail; onClose:
                   onClick={() => run("close", () => supabase.rpc("update_room", { p_room_id: room.id, p_is_closed: !room.is_closed }))}
                   icon={room.is_closed ? <DoorOpen className="size-4" aria-hidden /> : <DoorClosed className="size-4" aria-hidden />}
                 >
-                  {room.is_closed ? "Re-open" : "Close"}
+                  {room.is_closed ? "Re-open room" : "Close room"}
                 </Button>
               </div>
             )}

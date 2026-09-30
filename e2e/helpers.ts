@@ -85,8 +85,8 @@ export async function createRoom(page: Page, bookId: string, options: RoomOption
   await page.goto(`/rooms/new?book=${bookId}`);
   await page.getByLabel("Room name").fill(options.name);
   if (options.description) await page.getByLabel("Description").fill(options.description);
-  if (options.mode) await page.getByRole("radio", { name: new RegExp(`^${options.mode}`) }).click();
-  if (options.visibility) await page.getByRole("radio", { name: new RegExp(`^${options.visibility}`) }).click();
+  if (options.mode) await page.getByRole("radiogroup", { name: "Room mode" }).getByRole("radio", { name: new RegExp(`^${options.mode}`) }).click();
+  if (options.visibility) await page.getByRole("radiogroup", { name: "Room visibility" }).getByRole("radio", { name: new RegExp(`^${options.visibility}`) }).click();
   if (options.limit) await page.getByLabel("Member limit").fill(String(options.limit));
   await page.getByRole("button", { name: "Open the room" }).click();
   await page.waitForURL(/\/rooms\/[0-9a-f-]{36}/);

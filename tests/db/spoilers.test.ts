@@ -382,6 +382,17 @@ describe("progress and the group", () => {
     expect(passes.map((p) => p.data.passed_user_id)).toContain(sara.id);
   });
 
+  it("does not turn two readers leap-frogging each other into a stream of events", async () => {
+    const [sara, fahad] = readers; // Fahad 0.40, Sara 0.31
+    for (const step of [0.41, 0.43, 0.45, 0.47]) {
+      await w.read(sara, room, step);          // Sara overtakes Fahad…
+      await w.read(fahad, room, step + 0.01);  // …and Fahad overtakes her back
+    }
+    const all = await activity("passed");
+    expect(all.filter((a) => a.actor_id === sara.id && a.data.passed_user_id === fahad.id)).toHaveLength(1);
+    expect(all.filter((a) => a.actor_id === fahad.id && a.data.passed_user_id === sara.id)).toHaveLength(1);
+  });
+
   it("announces a finish to the room exactly once", async () => {
     const noor = readers[3];
     await w.read(noor, room, 1);
