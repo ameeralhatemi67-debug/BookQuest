@@ -132,8 +132,8 @@ function wrap(text, width) {
 }
 
 /** Builds a PDF by hand: `pages` A5-ish pages of Times text, plus optional filler to reach `padToBytes`. */
-function makePdf(pages, padToBytes = 0) {
-  const random = rng(7);
+function makePdf(pages, padToBytes = 0, seed = 7) {
+  const random = rng(seed);
   const objects = [];
   const add = (body) => objects.push(body) && objects.length; // returns 1-based object number
 
@@ -158,7 +158,7 @@ function makePdf(pages, padToBytes = 0) {
     // An unreferenced stream object: valid PDF, incompressible-ish filler for large-upload tests.
     const size = Math.max(0, padToBytes - 200_000);
     const filler = Buffer.alloc(size);
-    const fill = rng(99);
+    const fill = rng(seed + 92);
     for (let i = 0; i < size; i += 4096) filler.writeUInt32LE(Math.floor(fill() * 0xffffffff), Math.min(i, size - 4));
     objects.push({ raw: Buffer.concat([Buffer.from(`<< /Length ${size} >>\nstream\n`, "latin1"), filler, Buffer.from("\nendstream", "latin1")]) });
   }
@@ -195,5 +195,9 @@ await writeFile(join(outDir, "field-notes.pdf"), makePdf(24));
 // Files that must be rejected.
 await writeFile(join(outDir, "not-a-book.pdf"), Buffer.from("MZ\x90\x00 this is not a pdf at all"));
 await writeFile(join(outDir, "corrupt.epub"), Buffer.concat([Buffer.from("PK\x03\x04", "latin1"), Buffer.alloc(26), Buffer.from("mimetypeapplication/epub+zip", "latin1"), Buffer.alloc(400, 7)]));
-if (largeMb > 0) await writeFile(join(outDir, "large.pdf"), makePdf(12, largeMb * 1024 * 1024));
+if (largeMb > 0) {
+  await writeFile(join(outDir, "large.pdf"), makePdf(12, largeMb * 1024 * 1024));
+  // A second, different large file for the cancel test.
+  await writeFile(join(outDir, "cancel-me.pdf"), makePdf(6, 24 * 1024 * 1024, 11));
+}
 console.log(`fixtures written to ${outDir}${largeMb ? ` (including a ${largeMb} MB large.pdf)` : ""}`);

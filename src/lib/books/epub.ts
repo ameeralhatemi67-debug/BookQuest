@@ -92,8 +92,18 @@ export async function inspectEpub(file: Blob, onStage?: (stage: "opening" | "met
   onStage?.("opening");
   const corrupt = new BookParseError("corrupt", "This EPUB couldn't be opened. The file may be damaged or not a valid EPUB.");
   let book: Book;
+  const buffer = await file.arrayBuffer();
+  // epub.js never settles on an archive it cannot read, so check the container
+  // ourselves first: a damaged file is reported in milliseconds, not after a timeout.
   try {
-    book = ePub(await file.arrayBuffer());
+    const { default: JSZip } = await import("jszip");
+    const zip = await JSZip.loadAsync(buffer);
+    if (!zip.file("META-INF/container.xml")) throw corrupt;
+  } catch {
+    throw corrupt;
+  }
+  try {
+    book = ePub(buffer);
     await withTimeout(book.ready, 45_000, corrupt);
   } catch {
     throw corrupt;
