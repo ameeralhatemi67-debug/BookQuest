@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { Suspense } from "react";
-import { ReaderApp, type ReaderBook } from "@/components/reader/reader-app";
+import type { ReaderBook } from "@/components/reader/reader-app";
+import { ReaderLoader } from "@/components/reader/reader-loader";
 import { requireAlpha } from "@/lib/supabase/guard";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import type { RoomDetail } from "@/lib/types";
@@ -41,9 +41,5 @@ export default async function ReadPage({ params }: { params: Promise<{ roomId: s
     uploader_id: room.book.uploader_id ?? "",
   };
 
-  return (
-    <Suspense>
-      <ReaderApp room={room} book={readerBook} />
-    </Suspense>
-  );
+  return <ReaderLoader room={room} book={readerBook} />;
 }

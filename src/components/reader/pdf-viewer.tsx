@@ -316,8 +316,9 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
 
   // Remember where we are right before a zoom / resize re-lays the pages out.
   useLayoutEffect(() => {
+    // The scroll container is the same element for the viewer's whole life.
+    const element = scroller.current;
     return () => {
-      const element = scroller.current;
       const { tops, heights } = layoutRef.current;
       if (!element || tops.length === 0 || !restored.current) return;
       const state = pdfViewState({ pageTops: tops, pageHeights: heights, scrollTop: element.scrollTop, viewportHeight: element.clientHeight });

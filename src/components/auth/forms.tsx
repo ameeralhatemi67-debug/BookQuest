@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FormError, FormNotice, Input } from "@/components/ui/field";
 import { siteUrl } from "@/lib/config";
 import { friendlyError } from "@/lib/errors";
+import { signOutAndClean } from "@/lib/auth-client";
 import { getSupabase } from "@/lib/supabase/client";
 
 const MIN_PASSWORD = 8;
@@ -293,7 +294,7 @@ export function SignOutButton({ className, children = "Sign out" }: { className?
       disabled={busy}
       onClick={async () => {
         setBusy(true);
-        await getSupabase().auth.signOut({ scope: "local" });
+        await signOutAndClean();
         router.replace("/login");
         router.refresh();
       }}

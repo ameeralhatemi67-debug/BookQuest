@@ -2,7 +2,7 @@
 
 import { Archive, DoorClosed, DoorOpen, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState, type FormEvent } from "react";
+import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { parseMemberLimit, RoomSettingsFields, type RoomSettings } from "@/components/room/room-form";
 import { Button } from "@/components/ui/button";
@@ -23,6 +23,17 @@ function settingsOf(room: RoomDetail): RoomSettings {
 }
 
 export function RoomSettingsDialog({ room, open, onOpenChange, onChanged }: { room: RoomDetail; open: boolean; onOpenChange: (open: boolean) => void; onChanged: () => void }) {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent title="Room settings" description={room.my_role === "owner" ? undefined : "Only the owner can change how this room works."}>
+        {/* Mounted only while open: the form starts from the room's current settings each time. */}
+        <SettingsBody room={room} onClose={() => onOpenChange(false)} onChanged={onChanged} />
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function SettingsBody({ room, onClose, onChanged }: { room: RoomDetail; onClose: () => void; onChanged: () => void }) {
   const router = useRouter();
   const supabase = getSupabase();
   const isOwner = room.my_role === "owner";
@@ -32,16 +43,6 @@ export function RoomSettingsDialog({ room, open, onOpenChange, onChanged }: { ro
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"leave" | "archive" | null>(null);
-
-  useEffect(() => {
-    if (open) {
-      setSettings(settingsOf(room));
-      setError(null);
-      setConfirm(null);
-    }
-    // Reset only when the dialog opens, not on every live refresh of `room`.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open]);
 
   async function run(key: string, action: () => PromiseLike<{ error: unknown }>, after?: () => void) {
     setBusy(key);
@@ -70,14 +71,12 @@ export function RoomSettingsDialog({ room, open, onOpenChange, onChanged }: { ro
         }),
       () => {
         toast.success("Room updated.");
-        onOpenChange(false);
+        onClose();
       },
     );
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent title="Room settings" description={isOwner ? undefined : "Only the owner can change how this room works."}>
         <div className="space-y-8">
           <FormError>{error}</FormError>
 
@@ -184,7 +183,5 @@ export function RoomSettingsDialog({ room, open, onOpenChange, onChanged }: { ro
             </div>
           </div>
         </div>
-      </DialogContent>
-    </Dialog>
   );
 }

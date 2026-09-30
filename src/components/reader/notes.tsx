@@ -1,14 +1,15 @@
 "use client";
 
-import { ExternalLink, Lock, MessageCircle, MoreHorizontal, Send, SmilePlus, Trash2, X } from "lucide-react";
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
+import { ExternalLink, Lock, MessageCircle, MoreHorizontal, Search, Send, SmilePlus, Trash2, X } from "lucide-react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { Avatar, personHue, type AvatarPerson } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/field";
+import { Input, Textarea } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/misc";
 import { Menu, MenuContent, MenuItem, MenuTrigger, Popover, PopoverContent, PopoverTrigger, SheetClose } from "@/components/ui/overlay";
 import { cn, isEmojiOnly, plural, timeAgo } from "@/lib/format";
+import { getSupabase } from "@/lib/supabase/client";
 import type { Marker } from "@/lib/types";
 import { AttachmentView } from "./media";
 import type { ViewerMarker } from "./types";
@@ -353,17 +354,36 @@ export function TrailList({
   meId,
   furthest,
   onOpen,
-  header,
+  roomId,
 }: {
+  roomId: string;
   markers: Marker[];
   annotations: Annotations;
   people: People;
   meId: string;
   furthest: number;
   onOpen: (marker: Marker) => void;
-  header?: ReactNode;
 }) {
-  const open = markers.filter((m) => annotations.isOpen(m));
+  // Search runs in the database and only ever matches notes this reader has unlocked.
+  const [query, setQuery] = useState("");
+  const [found, setFound] = useState<{ term: string; ids: Set<string> } | null>(null);
+  const term = query.trim();
+  useEffect(() => {
+    if (term.length < 2) return;
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      const { data } = await getSupabase().rpc("search_annotations", { p_room_id: roomId, p_query: term });
+      if (!cancelled) setFound({ term, ids: new Set(((data ?? []) as { marker_id: string }[]).map((row) => row.marker_id)) });
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [term, roomId]);
+  const searching = term.length >= 2;
+  const matches = searching && found?.term === term ? found.ids : null;
+
+  const open = markers.filter((m) => annotations.isOpen(m) && (!searching || matches?.has(m.id)));
   const ahead = markers.filter((m) => !annotations.isOpen(m));
   const openIds = open.map((m) => m.id).join(",");
 
@@ -380,8 +400,13 @@ export function TrailList({
 
   return (
     <div className="space-y-5">
-      {header}
-      {ahead.length > 0 && (
+      {markers.length > 0 && (
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-ink-faint" aria-hidden />
+          <Input type="search" value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search notes you've unlocked" aria-label="Search notes you've unlocked" className="pl-10" />
+        </div>
+      )}
+      {!searching && ahead.length > 0 && (
         <section aria-label="Waiting ahead" className="rounded-2xl border border-accent/25 bg-accent-soft/50 p-4">
           <p className="text-sm font-medium text-ink">
             {plural(ahead.length, "thing")} waiting ahead of you
@@ -409,7 +434,13 @@ export function TrailList({
 
       {open.length === 0 ? (
         <p className="py-6 text-center text-sm leading-relaxed text-ink-faint">
-          {markers.length === 0 ? "Nobody has left anything in this book yet. Select a passage to be the first." : "Nothing to open yet — keep reading."}
+          {searching
+            ? matches === null
+              ? "Searching…"
+              : `No unlocked notes mention “${term}”.`
+            : markers.length === 0
+              ? "Nobody has left anything in this book yet. Select a passage to be the first."
+              : "Nothing to open yet — keep reading."}
         </p>
       ) : (
         <ol className="space-y-1.5">

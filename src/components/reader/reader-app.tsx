@@ -194,9 +194,10 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
 
   const [root, setRoot] = useState<HTMLDivElement | null>(null);
   const viewer = useRef<ViewerHandle>(null);
-  const [settings, setSettings] = useState<ReaderSettings | null>(null);
+  // Client-only component (see reader-loader.tsx), so localStorage is available on first render.
+  const [settings, setSettings] = useState<ReaderSettings>(loadSettings);
   const [url, setUrl] = useState<string | null>(null);
-  const [fatal, setFatal] = useState<{ title: string; body: string; retry?: boolean } | null>(null);
+  const [failure, setFailure] = useState<{ title: string; body: string; retry?: boolean } | null>(null);
   const [loadFraction, setLoadFraction] = useState<number | null>(0);
   const [ready, setReady] = useState(false);
   const [toc, setToc] = useState<TocItem[]>([]);
@@ -216,21 +217,13 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
   const annotations = useAnnotations({ roomId: initialRoom.id, meId: me.user_id });
   // Stable pieces of the annotations API, so memoised values below only change when the data does.
   const { markUnlocked, loadNotes, markSeen, createNote, isOpen, onChange: onAnnotationChange, resync: resyncAnnotations } = annotations;
-  const initialAnchor = useMemo<Anchor | null>(
-    () => (typeof window === "undefined" ? null : resumeAnchor(initialRoom.id, book.format, initialRoom.my)),
-    // Computed once: where to open the book.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [],
-  );
+  // Computed once: where to open the book.
+  const [initialAnchor] = useState<Anchor | null>(() => resumeAnchor(initialRoom.id, book.format, initialRoom.my));
 
   // ------------------------------------------------------------ settings
-  useEffect(() => {
-    setSettings(loadSettings());
-  }, []);
-
   const updateSettings = useCallback((patch: Partial<ReaderSettings>) => {
     setSettings((current) => {
-      const next = { ...(current ?? DEFAULT_SETTINGS), ...patch };
+      const next = { ...current, ...patch };
       try {
         localStorage.setItem(SETTINGS_KEY, JSON.stringify(next));
       } catch {
@@ -241,23 +234,25 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
   }, []);
 
   // ------------------------------------------------------------ the book file (private → short-lived signed URL)
-  useEffect(() => {
-    let cancelled = false;
-    if (book.status !== "ready" || !book.storage_path) {
-      setFatal({
+  const bookUnavailable = book.status !== "ready" || !book.storage_path;
+  const fatal = bookUnavailable
+    ? {
         title: book.status === "disabled" ? "This book has been disabled" : "This book is no longer available",
         body: book.status === "disabled" ? "An admin switched this book off. Your notes and progress are kept." : "The person who uploaded it removed it. Your room, notes and journey are still here.",
-      });
-      return;
-    }
-    setFatal(null);
+        retry: false,
+      }
+    : failure;
+
+  useEffect(() => {
+    let cancelled = false;
+    if (bookUnavailable || !book.storage_path) return;
     supabase.storage
       .from("books")
       .createSignedUrl(book.storage_path, BOOK_URL_SECONDS)
       .then(({ data, error }) => {
         if (cancelled) return;
         if (error || !data?.signedUrl) {
-          setFatal({ title: "We couldn't open this book", body: "You may no longer have access to it, or the connection dropped. Try again in a moment.", retry: true });
+          setFailure({ title: "We couldn't open this book", body: "You may no longer have access to it, or the connection dropped. Try again in a moment.", retry: true });
           return;
         }
         setUrl(data.signedUrl);
@@ -265,7 +260,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
     return () => {
       cancelled = true;
     };
-  }, [attempt, book.status, book.storage_path, supabase]);
+  }, [attempt, bookUnavailable, book.storage_path, supabase]);
 
   const onViewerError = useCallback((error: ReaderError) => {
     const copy: Record<ReaderError["code"], { title: string; body: string; retry?: boolean }> = {
@@ -274,7 +269,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
       corrupt: { title: "This book can't be displayed", body: error.message },
       unsupported: { title: "This book can't be displayed", body: error.message },
     };
-    setFatal(copy[error.code]);
+    setFailure(copy[error.code]);
   }, []);
 
   // ------------------------------------------------------------ progress
@@ -450,7 +445,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
   const active = activeNote ? markerById.get(activeNote) : undefined;
   const canModerate = initialRoom.my_role === "owner" || initialRoom.my_role === "moderator";
   const progressNow = location?.reach ?? initialRoom.my?.furthest ?? 0;
-  const theme = settings?.theme ?? "light";
+  const theme = settings.theme;
 
   return (
     <PortalContainerContext.Provider value={root}>
@@ -497,7 +492,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
                 </PopoverTrigger>
               </Tooltip>
               <PopoverContent align="end" className="w-[min(320px,calc(100vw-1rem))]">
-                {settings && <SettingsPanel settings={settings} onChange={updateSettings} format={book.format} />}
+                <SettingsPanel settings={settings} onChange={updateSettings} format={book.format} />
                 <div className="mt-4 border-t border-line pt-3">
                   <FeedbackDialog>
                     <button type="button" className="flex h-10 w-full items-center gap-2 rounded-xl px-2 text-sm text-ink-soft hover:bg-sunk hover:text-ink">
@@ -525,7 +520,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
                   {fatal.retry && (
                     <Button
                       onClick={() => {
-                        setFatal(null);
+                        setFailure(null);
                         setUrl(null);
                         setReady(false);
                         setAttempt((n) => n + 1);
@@ -543,7 +538,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
             </div>
           ) : (
             <>
-              {url && settings && book.format === "epub" && (
+              {url && book.format === "epub" && (
                 <EpubViewer
                   key={`${url}-${attempt}`}
                   ref={viewer}
@@ -567,7 +562,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
                   onLoadProgress={setLoadFraction}
                 />
               )}
-              {url && settings && book.format === "pdf" && (
+              {url && book.format === "pdf" && (
                 <PdfViewer
                   key={`${url}-${attempt}`}
                   ref={viewer}
@@ -733,6 +728,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
             <div className="scroll-slim min-h-0 flex-1 overflow-y-auto px-3 py-4">
               {annotations.error && <p className="mb-3 rounded-xl bg-danger-soft px-3 py-2 text-sm text-danger">{annotations.error}</p>}
               <TrailList
+                roomId={initialRoom.id}
                 markers={annotations.markers}
                 annotations={annotations}
                 people={people}

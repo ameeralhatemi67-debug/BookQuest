@@ -87,25 +87,41 @@ export function useAnnotations({ roomId, meId }: { roomId: string; meId: string 
   const loadedIds = useRef(new Set<string>());
   const refreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const refreshMarkers = useCallback(async () => {
+  /** Reads the neutral markers of the room and this reader's unlocks. */
+  const fetchTrail = useCallback(async () => {
     const [markerResult, unlockResult] = await Promise.all([
       supabase.from("annotation_markers").select(MARKER_COLUMNS).eq("room_id", roomId).order("position", { ascending: true }),
       supabase.from("reading_unlocks").select("marker_id, via, unlocked_at, seen_at").eq("room_id", roomId).eq("user_id", meId),
     ]);
-    if (markerResult.error || unlockResult.error) {
-      setError(friendlyError(markerResult.error ?? unlockResult.error, "Couldn't load the notes in this book."));
-      return;
-    }
-    setError(null);
-    // Drafts (a note whose media is still uploading) are not shown as markers.
-    setMarkers(((markerResult.data ?? []) as Marker[]).filter((m) => m.published_at));
-    setUnlocks(new Map(((unlockResult.data ?? []) as Unlock[]).map((u) => [u.marker_id, u])));
-    setLoaded(true);
+    const failure = markerResult.error ?? unlockResult.error;
+    if (failure) return { error: friendlyError(failure, "Couldn't load the notes in this book.") } as const;
+    return {
+      error: null,
+      // Drafts (a note whose media is still uploading) are not shown as markers.
+      markers: ((markerResult.data ?? []) as Marker[]).filter((m) => m.published_at),
+      unlocks: new Map(((unlockResult.data ?? []) as Unlock[]).map((u) => [u.marker_id, u])),
+    } as const;
   }, [meId, roomId, supabase]);
 
+  const applyTrail = useCallback((trail: Awaited<ReturnType<typeof fetchTrail>>) => {
+    setError(trail.error);
+    if (trail.error !== null) return;
+    setMarkers(trail.markers);
+    setUnlocks(trail.unlocks);
+    setLoaded(true);
+  }, []);
+
+  const refreshMarkers = useCallback(async () => applyTrail(await fetchTrail()), [applyTrail, fetchTrail]);
+
   useEffect(() => {
-    void refreshMarkers();
-  }, [refreshMarkers]);
+    let cancelled = false;
+    void fetchTrail().then((trail) => {
+      if (!cancelled) applyTrail(trail);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [applyTrail, fetchTrail]);
 
   const isOpen = useCallback((marker: Marker) => marker.author_id === meId || unlocks.has(marker.id), [meId, unlocks]);
 

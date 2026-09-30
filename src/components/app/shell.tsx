@@ -3,7 +3,7 @@
 import { Bell, Compass, Home, Library, LogOut, Monitor, Moon, Search, ShieldCheck, Sun, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { useSyncExternalStore, type ReactNode } from "react";
 import { FeedbackFab } from "@/components/app/feedback";
 import { NotificationBell, useNotifications } from "@/components/app/notifications";
 import { useMe } from "@/components/app/providers";
@@ -11,7 +11,7 @@ import { Logo } from "@/components/brand/logo";
 import { Avatar } from "@/components/ui/avatar";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/ui/overlay";
 import { cn } from "@/lib/format";
-import { getSupabase } from "@/lib/supabase/client";
+import { signOutAndClean } from "@/lib/auth-client";
 
 const NAV = [
   { href: "/home", label: "Home", icon: Home },
@@ -26,23 +26,45 @@ function applyTheme(theme: Theme) {
   document.documentElement.classList.toggle("dark", dark);
 }
 
-function useTheme(): [Theme, (theme: Theme) => void] {
-  const [theme, setTheme] = useState<Theme>("system");
-  useEffect(() => {
+// The chosen theme lives in localStorage (so the inline script in the root
+// layout can apply it before first paint); React reads it as an external store.
+const THEME_EVENT = "marginalia:theme";
+
+function readTheme(): Theme {
+  try {
     const saved = localStorage.getItem("theme");
-    if (saved === "light" || saved === "dark") setTheme(saved);
-    const media = window.matchMedia("(prefers-color-scheme: dark)");
-    const onChange = () => (localStorage.getItem("theme") ?? "system") === "system" && applyTheme("system");
-    media.addEventListener("change", onChange);
-    return () => media.removeEventListener("change", onChange);
-  }, []);
+    return saved === "light" || saved === "dark" ? saved : "system";
+  } catch {
+    return "system";
+  }
+}
+
+function subscribeTheme(onChange: () => void) {
+  const media = window.matchMedia("(prefers-color-scheme: dark)");
+  const onSystemChange = () => readTheme() === "system" && applyTheme("system");
+  window.addEventListener("storage", onChange);
+  window.addEventListener(THEME_EVENT, onChange);
+  media.addEventListener("change", onSystemChange);
+  return () => {
+    window.removeEventListener("storage", onChange);
+    window.removeEventListener(THEME_EVENT, onChange);
+    media.removeEventListener("change", onSystemChange);
+  };
+}
+
+function useTheme(): [Theme, (theme: Theme) => void] {
+  const theme = useSyncExternalStore<Theme>(subscribeTheme, readTheme, () => "system");
   return [
     theme,
     (next) => {
-      setTheme(next);
-      if (next === "system") localStorage.removeItem("theme");
-      else localStorage.setItem("theme", next);
+      try {
+        if (next === "system") localStorage.removeItem("theme");
+        else localStorage.setItem("theme", next);
+      } catch {
+        // Not persisted; still applied for this visit.
+      }
       applyTheme(next);
+      window.dispatchEvent(new Event(THEME_EVENT));
     },
   ];
 }
@@ -106,7 +128,7 @@ function UserMenu() {
         <MenuSeparator />
         <MenuItem
           onSelect={async () => {
-            await getSupabase().auth.signOut({ scope: "local" });
+            await signOutAndClean();
             router.replace("/login");
             router.refresh();
           }}

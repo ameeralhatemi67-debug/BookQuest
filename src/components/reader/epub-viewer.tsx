@@ -12,7 +12,7 @@ import { EPUB_LOCATION_CHARS, loadEpubJs } from "@/lib/books/epub";
 import { epubLabel, epubProgress, epubReach, isEpubAnchor, type EpubAnchor } from "@/lib/location";
 import { getSupabase } from "@/lib/supabase/client";
 import { personHue } from "@/components/ui/avatar";
-import { FONT_STACK, ReaderError, THEME_COLORS, WIDTH_PX, type ReaderSettings, type TocItem, type ViewerHandle, type ViewerMarker, type ViewerProps, type ViewerSelection } from "./types";
+import { FONT_STACK, ReaderError, THEME_COLORS, WIDTH_PX, type ReaderSettings, type TocItem, type ViewerHandle, type ViewerProps, type ViewerSelection } from "./types";
 
 const BOOK_CACHE = "marginalia-books-v1";
 
@@ -125,6 +125,7 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
     let rendition: Rendition | null = null;
     let resizeObserver: ResizeObserver | null = null;
     let resizeTimer: ReturnType<typeof setTimeout> | null = null;
+    const highlights = highlighted.current;
 
     (async () => {
       const ePub = await loadEpubJs();
@@ -330,7 +331,7 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
       if (resizeTimer) clearTimeout(resizeTimer);
       resizeObserver?.disconnect();
       internals.current = null;
-      highlighted.current.clear();
+      highlights.clear();
       try {
         rendition?.destroy();
         book?.destroy();

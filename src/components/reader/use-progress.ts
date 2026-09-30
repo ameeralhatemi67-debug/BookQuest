@@ -77,15 +77,21 @@ export function useProgressSaver({ roomId, initialFurthest, lockedPositions, onU
   const firstPendingAt = useRef<number | null>(null);
   const saving = useRef(false);
   const retries = useRef(0);
-  const activeSince = useRef<number>(Date.now());
+  const activeSince = useRef(0);
   const callbacks = useRef({ onUnlocked, onCompleted });
   const locked = useRef(lockedPositions);
   const furthestRef = useRef(initialFurthest);
+  // `save` re-schedules itself (retry / follow-up); it does so through this ref.
+  const saveAgain = useRef<() => void>(() => {});
 
   useEffect(() => {
     callbacks.current = { onUnlocked, onCompleted };
     locked.current = lockedPositions;
   });
+
+  useEffect(() => {
+    activeSince.current = Date.now();
+  }, []);
 
   /** Seconds of attention since the last save (only counted while the tab is visible). */
   const takeSeconds = useCallback(() => {
@@ -131,7 +137,7 @@ export function useProgressSaver({ roomId, initialFurthest, lockedPositions, onU
       const delay = RETRY_DELAYS[Math.min(retries.current, RETRY_DELAYS.length - 1)];
       retries.current += 1;
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => void save(), delay);
+      timer.current = setTimeout(() => saveAgain.current(), delay);
       return;
     }
 
@@ -146,9 +152,13 @@ export function useProgressSaver({ roomId, initialFurthest, lockedPositions, onU
     // Something newer arrived while we were saving.
     if (pending.current) {
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => void save(), DWELL_MS);
+      timer.current = setTimeout(() => saveAgain.current(), DWELL_MS);
     }
   }, [buildArgs]);
+
+  useEffect(() => {
+    saveAgain.current = () => void save();
+  }, [save]);
 
   /** Called by the viewer on every page change / scroll stop. */
   const report = useCallback(
