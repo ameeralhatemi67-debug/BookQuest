@@ -27,6 +27,18 @@ export default defineConfig({
           hookTimeout: 120_000,
         },
       },
+      {
+        // Drives the local emulator with the real supabase-js / tus-js-client
+        // libraries: auth, Data API, Storage (incl. resumable uploads), Realtime.
+        resolve: { alias },
+        test: {
+          name: "integration",
+          environment: "node",
+          include: ["tests/integration/**/*.test.ts"],
+          testTimeout: 60_000,
+          hookTimeout: 120_000,
+        },
+      },
     ],
   },
 });

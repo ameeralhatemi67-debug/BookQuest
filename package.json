@@ -16,7 +16,11 @@
     "db:start": "supabase start",
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
-    "db:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts"
+    "db:types": "supabase gen types typescript --local > src/lib/supabase/database.types.ts",
+    "test:integration": "vitest run --project integration",
+    "test:all": "vitest run",
+    "emulator": "tsx dev/emulator/server.ts",
+    "dev:local": "node scripts/dev-local.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
