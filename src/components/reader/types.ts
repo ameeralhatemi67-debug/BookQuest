@@ -59,6 +59,8 @@ export interface ViewerLocation {
   /** PDF: current page number and total. */
   page?: number;
   pageCount?: number;
+  /** Words actually visible; image-only pages report zero. */
+  visibleWords?: number;
 }
 
 /** A passage the reader selected (or the current page, when nothing is selected). */
@@ -75,6 +77,7 @@ export interface ViewerSelection {
 export interface ViewerMarker {
   id: string;
   authorId: string;
+  attention?: import("@/lib/types").NoteAttention;
   anchor: Anchor;
   position: number;
   /** Open = readable by this viewer. Locked markers are drawn neutrally. */
@@ -102,6 +105,7 @@ export interface ViewerProps {
   settings: ReaderSettings;
   initialAnchor: Anchor | null;
   markers: ViewerMarker[];
+  draftAnchor?: Anchor | null;
   onReady(info: { toc: TocItem[]; pageCount?: number }): void;
   onRelocate(location: ViewerLocation): void;
   onSelection(selection: ViewerSelection | null): void;

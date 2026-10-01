@@ -13,3 +13,9 @@ No observations at session start, 2026-09-30.
 - Skill: browser verification workflows
 - Evidence: Editing reader components during a multi-page browser run triggered development hot-reload failures and made later progress/navigation results unreliable. A stable restarted server separated those failures from actual control-overlap defects.
 - Proposed improvement: Finish application edits before a browser batch. After a development-server error, restart it and repeat affected flows; read bounded diagnostics before changing business logic.
+
+### Observation 3: Use the visible EPUB column for gesture coordinates
+- Status: OPEN
+- Skill: browser verification workflows
+- Evidence: EPUB iframes can span an entire horizontal chapter. Coordinates computed from the middle of their bounding box fell outside the visible column; the same double-tap checks passed using the reading surface’s visible bounds.
+- Proposed improvement: Base pointer coordinates on the visible reader container or a visible text range. Keep tests for outside-page gestures separate from in-page gestures.

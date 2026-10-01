@@ -8,7 +8,7 @@ import { Avatar } from "@/components/ui/avatar";
 import { ButtonLink } from "@/components/ui/button";
 import { Badge, Card, Meter, SectionHeading } from "@/components/ui/misc";
 import { daysBetween, formatDate, formatDuration, plural, timeAgo } from "@/lib/format";
-import { formatPercent, isComplete } from "@/lib/location";
+import { formatPercent } from "@/lib/location";
 import { requireAlpha } from "@/lib/supabase/guard";
 import { createSupabaseServer } from "@/lib/supabase/server";
 import type { Journey, JourneyMoment, JourneyReader, NoteContent } from "@/lib/types";
@@ -63,8 +63,8 @@ export default async function JourneyPage({ params }: { params: Promise<{ roomId
 
   const active = journey.readers.filter((r) => r.status === "active");
   const finishers = journey.readers.filter((r) => r.completed_at).sort((a, b) => new Date(a.completed_at!).getTime() - new Date(b.completed_at!).getTime());
-  const everyoneDone = active.length > 0 && active.every((r) => isComplete(r.furthest));
-  const viewerDone = isComplete(journey.viewer_furthest);
+  const everyoneDone = active.length > 0 && active.every((r) => Boolean(r.completed_at));
+  const viewerDone = Boolean(journey.readers.find(r => r.user_id === me.user_id)?.completed_at);
   const started = journey.first_started_at;
   const ended = everyoneDone && finishers.length > 0 ? finishers[finishers.length - 1].completed_at! : (journey.last_read_at ?? new Date().toISOString());
   const days = started ? Math.max(1, daysBetween(started, ended) + 1) : 0;
@@ -125,7 +125,7 @@ export default async function JourneyPage({ params }: { params: Promise<{ roomId
         <SectionHeading id="readers-heading" title="The readers" hint={finishers.length > 0 ? `${firstName(finishers[0].user_id)} finished first${finishers[0].completed_at ? `, on ${formatDate(finishers[0].completed_at)}` : ""}.` : undefined} />
         <Card className="divide-y divide-line px-5">
           {journey.readers.map((reader) => {
-            const done = isComplete(reader.furthest);
+            const done = Boolean(reader.completed_at);
             const place = finishers.findIndex((f) => f.user_id === reader.user_id);
             return (
               <div key={reader.user_id} className="py-4">

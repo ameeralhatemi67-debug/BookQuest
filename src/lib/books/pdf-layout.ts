@@ -3,6 +3,7 @@ export interface PageSize { width: number; height: number }
 /** View range: 20% enlarges the book, 100% fits one page, 120% fits two. */
 export function pdfLayout(sizes: PageSize[], width: number, height: number, zoom: number) {
   const gap = 16;
+  const columnGap = 44;
   const narrow = width < 640;
   const gutter = narrow ? 8 : 48;
   const columns = zoom >= 1.2 ? 2 : 1;
@@ -13,14 +14,14 @@ export function pdfLayout(sizes: PageSize[], width: number, height: number, zoom
     const row = sizes.slice(i, i + columns);
     const rowWidth = row.reduce((sum, page) => sum + page.width, 0);
     // Phone arrows sit below the page; desktop arrows sit in its side margins.
-    const scale = Math.min(Math.max(1, width - gutter * 2 - gap * (row.length - 1)) / rowWidth, Math.max(1, height - gap * 2 - (narrow ? 56 : 0)) / Math.max(...row.map(page => page.height))) / (columns === 2 ? 1 : zoom);
+    const scale = Math.min(Math.max(1, width - gutter * 2 - columnGap * (row.length - 1)) / rowWidth, Math.max(1, height - gap * 2 - (narrow ? 56 : 0)) / Math.max(...row.map(page => page.height))) / (columns === 2 ? 1 : zoom);
     let x = 0;
     for (const page of row) {
       tops.push(y); widths.push(page.width * scale); heights.push(page.height * scale); scales.push(scale); lefts.push(x);
-      x += page.width * scale + gap;
+      x += page.width * scale + columnGap;
     }
-    rows.push({ start: i, width: x - gap });
-    contentWidth = Math.max(contentWidth, x - gap + gutter * 2);
+    rows.push({ start: i, width: x - columnGap });
+    contentWidth = Math.max(contentWidth, x - columnGap + gutter * 2);
     y += Math.max(height, Math.max(...row.map(page => page.height * scale)) + gap * 2);
   }
   for (const row of rows) for (let i = row.start; i < Math.min(sizes.length, row.start + columns); i++) lefts[i] += (contentWidth - row.width) / 2;

@@ -102,7 +102,7 @@ interface EpubInternals {
 }
 
 export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number | null; hasLocations: boolean; locationsPath: string }>(function EpubViewer(
-  { bookId, url, settings, initialAnchor, markers, renderMarker, onReady, onRelocate, onSelection, onAddNote, onToggleChrome, onError, onLoadProgress, size, hasLocations, locationsPath },
+  { bookId, url, settings, initialAnchor, markers, draftAnchor, renderMarker, onReady, onRelocate, onSelection, onAddNote, onToggleChrome, onError, onLoadProgress, size, hasLocations, locationsPath },
   ref,
 ) {
   const host = useRef<HTMLDivElement>(null);
@@ -112,7 +112,7 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
   const settingsRef = useRef(settings);
   const highlighted = useRef(new Map<string, string>()); // marker id → cfiRange
   const [ready, setReady] = useState(false);
-  const [placements, setPlacements] = useState<{ id: string; top: number }[]>([]);
+  const [placements, setPlacements] = useState<{ id: string; top: number; pinX: number; pinY: number }[]>([]);
   const [layoutTick, setLayoutTick] = useState(0);
 
   useLayoutEffect(() => {
@@ -236,7 +236,14 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
               if (caret) { range.setStart(caret.offsetNode, caret.offset); range.collapse(true); }
               else if (!range.startContainer.parentElement) { range.selectNodeContents(event.target as Node); range.collapse(true); }
             }
-            callbacks.current.onAddNote(selectionFromRange(range, contents));
+            const note = selectionFromRange(range, contents);
+            const box = host.current?.getBoundingClientRect();
+            const frameBox = (contents.window.frameElement as HTMLElement | null)?.getBoundingClientRect();
+            if (!note.quote && isEpubAnchor(note.anchor) && box && frameBox) {
+              note.anchor.x = Math.max(0, Math.min(1, (event.clientX + frameBox.left - box.left) / box.width));
+              note.anchor.y = Math.max(0, Math.min(1, (event.clientY + frameBox.top - box.top) / box.height));
+            }
+            callbacks.current.onAddNote(note);
           } catch {
             const location = state.location;
             if (location) callbacks.current.onAddNote({ anchor: { type: "epub", cfi: location.start.cfi, href: location.start.href }, position: epubProgress(location.start.location, total), label: epubLabel(chapterAt(location.start.index)?.label, epubProgress(location.start.location, total)), quote: null, rect: null });
@@ -281,7 +288,18 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
         state.location = location;
         const chapter = chapterAt(location.start.index);
         const progress = epubProgress(location.start.location, total);
+        let visibleWords: number | undefined;
+        try {
+          const start = rendition!.getRange(location.start.cfi) as Range | undefined;
+          const end = rendition!.getRange(location.end.cfi) as Range | undefined;
+          if (start && end && start.startContainer.ownerDocument === end.endContainer.ownerDocument) {
+            const text = start.cloneRange();
+            text.setEnd(end.endContainer, end.endOffset);
+            visibleWords = text.toString().match(/\S+/g)?.length ?? 0;
+          }
+        } catch { /* use the conservative fallback when a cross-chapter range cannot resolve */ }
         callbacks.current.onRelocate({
+          visibleWords,
           progress,
           reach: epubReach(location.end.location, total, location.atEnd),
           label: epubLabel(chapter?.label, progress),
@@ -415,8 +433,9 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
     if (!state || !ready || !container) return;
     const measure = () => {
       const box = container.getBoundingClientRect();
-      const next: { id: string; top: number }[] = [];
-      for (const marker of markers) {
+      const next: { id: string; top: number; pinX: number; pinY: number }[] = [];
+      const anchors = [...markers, ...(draftAnchor ? [{ id: "draft", anchor: draftAnchor }] : [])];
+      for (const marker of anchors) {
         if (!isEpubAnchor(marker.anchor)) continue;
         let range: Range | undefined;
         try {
@@ -436,7 +455,9 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
         const left = rect.left + frameRect.left;
         // Only markers whose anchor falls inside the visible page (column).
         if (left < box.left - 2 || left > box.right - 2) continue;
-        next.push({ id: marker.id, top: rect.top + frameRect.top - box.top });
+        const pinX = marker.anchor.x === undefined ? left - box.left : marker.anchor.x * box.width;
+        const pinY = marker.anchor.y === undefined ? rect.top + frameRect.top - box.top : marker.anchor.y * box.height;
+        next.push({ id: marker.id, top: pinY, pinX, pinY });
       }
       // Keep markers from sitting on top of each other.
       next.sort((a, b) => a.top - b.top);
@@ -452,7 +473,7 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
       cancelAnimationFrame(frameId);
       clearTimeout(late);
     };
-  }, [markers, ready, layoutTick, settings.fontSize, settings.lineHeight, settings.font, settings.width]);
+  }, [markers, draftAnchor, ready, layoutTick, settings.fontSize, settings.lineHeight, settings.font, settings.width]);
 
   // ------------------------------------------------------------ keyboard (outside the book iframe)
   useEffect(() => {
@@ -509,16 +530,17 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
 
   return (
     <div className="reader-page relative mx-auto flex h-full w-full justify-center px-4 py-4 sm:px-12 sm:py-6" style={{ maxWidth: WIDTH_PX[settings.width] + 96 }}>
-      <div ref={frame} className="relative h-full w-full min-w-0">
+      <div ref={frame} data-note-surface className="relative h-full w-full min-w-0">
         {/* epub.js renders the book's iframe into this element */}
         <div ref={host} className="h-full w-full" style={{ colorScheme: settings.theme === "dark" ? "dark" : "light" }} />
+        {placements.map(p => (p.id === "draft" || byId.get(p.id)?.open) && <span key={`pin-${p.id}`} data-note-pin={p.id} className={`note-pin ${p.id === "draft" ? "note-pin-draft" : ""}`} style={{ left: p.pinX, top: p.pinY, background: p.id === "draft" ? undefined : `oklch(0.62 0.12 ${personHue(byId.get(p.id)!.authorId)})` }} aria-hidden />)}
         {/* margin layer: things left on this page */}
         <div className="pointer-events-none absolute inset-y-0 -right-2 w-0 sm:-right-9" aria-label="Notes on this page">
           {placements.map((placement) => {
             const marker = byId.get(placement.id);
             if (!marker) return null;
             return (
-              <div key={placement.id} className="pointer-events-auto absolute right-0 translate-x-1/2" style={{ top: Math.max(0, placement.top - 8) }}>
+              <div key={placement.id} className="pointer-events-auto absolute right-0 translate-x-1/2" style={{ top: Math.min((frame.current?.clientHeight ?? Infinity) - 44, Math.max(0, placement.top - 8)) }}>
                 {renderMarker(marker)}
               </div>
             );

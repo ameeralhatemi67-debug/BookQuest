@@ -10,7 +10,7 @@ import { AvatarStack } from "@/components/ui/avatar";
 import { buttonClass } from "@/components/ui/button";
 import { Badge, Meter } from "@/components/ui/misc";
 import { cn, plural, timeAgo } from "@/lib/format";
-import { formatPercent, isComplete } from "@/lib/location";
+import { formatPercent } from "@/lib/location";
 import { gapPercent } from "@/lib/progress-track";
 import { roomMode } from "@/lib/room-modes";
 import type { RoomCard, RoomPreview, RoomVisibility } from "@/lib/types";
@@ -53,7 +53,7 @@ export function duoSentence(room: RoomCard, meId: string): ReactNode {
   if (!other) return "Waiting for your reading partner to join.";
   const gap = gapPercent(me?.furthest ?? 0, other.furthest);
   const name = other.display_name.split(" ")[0];
-  if (isComplete(other.furthest) && isComplete(me?.furthest ?? 0)) return `You and ${name} both finished.`;
+  if (Boolean(other.completed_at) && Boolean(me?.completed_at)) return `You and ${name} both finished.`;
   if (other.furthest <= 0 && (me?.furthest ?? 0) <= 0) return `Neither of you has started yet.`;
   if (Math.abs(gap) < 1) return `You and ${name} are on the same page.`;
   return gap > 0 ? `${name} is ${gap}% ahead of you.` : `You're ${-gap}% ahead of ${name}.`;
@@ -68,7 +68,7 @@ export function ContinueReadingCard({ room }: { room: RoomCard }) {
   const me = useMe();
   const mode = roomMode(room.mode);
   const started = Boolean(room.my && room.my.furthest > 0);
-  const finished = isComplete(room.my?.furthest ?? 0);
+  const finished = Boolean(room.my?.completed_at);
   const unavailable = room.book.status !== "ready";
 
   return (

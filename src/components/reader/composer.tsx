@@ -9,6 +9,7 @@ import { SheetClose } from "@/components/ui/overlay";
 import { cn, formatBytes } from "@/lib/format";
 import { ATTACHMENT_ACCEPT, validateAttachment, type AttachmentKind } from "@/lib/limits";
 import { canRecordVoice, VoiceRecorder } from "./media";
+import type { NoteAttention, RoomMember } from "@/lib/types";
 import { QUICK_REACTIONS } from "./notes";
 import type { ViewerSelection } from "./types";
 import type { Annotations, UploadingState } from "./use-annotations";
@@ -16,7 +17,9 @@ import type { Annotations, UploadingState } from "./use-annotations";
 const MAX_FILES = 4;
 
 /** The "leave something here" panel. Reading stays primary: it is a margin panel, not a page. */
-export function NoteComposer({ selection, annotations, onDone }: { selection: ViewerSelection; annotations: Annotations; onDone: (markerId: string) => void }) {
+export function NoteComposer({ selection, annotations, members, meId, onDone }: { selection: ViewerSelection; annotations: Annotations; members: RoomMember[]; meId: string; onDone: (markerId: string) => void }) {
+  const [recipient, setRecipient] = useState("room");
+  const [attention, setAttention] = useState<NoteAttention>("gentle");
   const [body, setBody] = useState("");
   const [emoji, setEmoji] = useState<string | null>(null);
   const [link, setLink] = useState("");
@@ -57,7 +60,7 @@ export function NoteComposer({ selection, annotations, onDone }: { selection: Vi
     setError(null);
     try {
       const id = await annotations.createNote(
-        { anchor: selection.anchor, position: selection.position, label: selection.label, body, emoji: emoji ?? undefined, link: showLink ? link : undefined, quote: selection.quote, files },
+        { anchor: selection.anchor, position: selection.position, label: selection.label, body, emoji: emoji ?? undefined, link: showLink ? link : undefined, quote: selection.quote, files, attention, recipientId: recipient === "room" ? null : recipient },
         setUploading,
       );
       onDone(id);
@@ -87,6 +90,22 @@ export function NoteComposer({ selection, annotations, onDone }: { selection: Vi
           </blockquote>
         )}
 
+        <div className="grid grid-cols-2 gap-3">
+          <label className="space-y-1.5 text-xs font-medium text-ink-soft">Who can see it
+            <select aria-label="Who can see this note" value={recipient} disabled={busy} onChange={e => setRecipient(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-raised px-2 text-sm text-ink">
+              <option value="room">Everyone in the room</option>
+              <option value={meId}>Only me</option>
+              {members.filter(m => m.user_id !== meId).map(m => <option key={m.user_id} value={m.user_id}>{m.display_name}</option>)}
+            </select>
+          </label>
+          <label className="space-y-1.5 text-xs font-medium text-ink-soft">Attention
+            <select aria-label="Attention level" value={attention} disabled={busy} onChange={e => setAttention(e.target.value as NoteAttention)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-raised px-2 text-sm text-ink">
+              <option value="quiet">Quiet · stays still</option>
+              <option value="gentle">Gentle · little hops</option>
+              <option value="playful">Playful · hops & spins</option>
+            </select>
+          </label>
+        </div>
         <Textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}

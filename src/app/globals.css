@@ -1,5 +1,29 @@
 @import "tailwindcss";
 
+/* A note moves inside its touch target, so it is always easy to catch. */
+.note-avatar-face { transform-origin: 50% 70%; transition: transform 180ms ease; }
+.note-avatar[data-attention="gentle"] .note-avatar-face { animation: note-hop 7s ease-in-out infinite; }
+.note-avatar[data-attention="playful"] .note-avatar-face { animation: note-play 6s ease-in-out infinite; }
+.note-avatar:hover .note-avatar-face, .note-avatar:active .note-avatar-face, .note-avatar:focus-visible .note-avatar-face { animation-play-state: paused; }
+@keyframes note-hop { 0%, 72%, 100% { transform: translateY(0); } 78%, 87% { transform: translateY(-8px) rotate(-7deg); } 83%, 92% { transform: translateY(0) rotate(6deg); } }
+@keyframes note-play { 0%, 58%, 100% { transform: translateY(0) rotate(0); } 64% { transform: translateY(-13px) rotate(-14deg); } 72% { transform: translateY(0) rotate(14deg); } 82% { transform: translateY(-9px) rotate(360deg); } 91% { transform: translateY(0) rotate(360deg); } }
+.note-pin { position: absolute; z-index: 3; width: 9px; height: 9px; border: 2px solid var(--page); border-radius: 50% 50% 50% 0; transform: translate(-50%, -50%) rotate(-45deg); background: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent); pointer-events: none; }
+.note-pin-draft { animation: breathe 2s ease-in-out infinite; }
+@media (hover: hover) and (pointer: fine) {
+  .progress-avatar-drop { transition: margin 300ms ease-out; }
+  .progress-avatar-figure { isolation: isolate; transition: transform 350ms cubic-bezier(.2,.8,.2,1); }
+  .progress-avatar-figure::before { content: ""; position: absolute; inset: -2px; z-index: -1; background: oklch(0.86 0.06 var(--reader-hue)); border: 2px solid var(--page); border-radius: 50%; transform: rotate(45deg); transition: border-radius 350ms ease, inset 350ms ease; box-shadow: 0 2px 8px #0001; }
+  .progress-avatar-drop:hover { z-index: 20; }
+  .progress-avatar-drop:hover .progress-avatar-figure { transform: translate(23px, var(--reader-y, 0px)); }
+  .progress-avatar-drop:hover .progress-avatar-figure::before { border-radius: 50% 50% 50% 0; }
+  .progress-avatar-figure::after { content: ""; position: absolute; right: 100%; top: 50%; width: 0; height: 1px; background: var(--accent); opacity: 0; transition: width 350ms ease, opacity 350ms ease; }
+  .progress-avatar-drop:hover .progress-avatar-figure::after { width: 10px; opacity: .55; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .note-avatar-face, .note-pin-draft { animation: none !important; }
+  .progress-avatar-drop, .progress-avatar-figure, .progress-avatar-figure::before, .progress-avatar-figure::after { transition-duration: 0.01ms !important; }
+}
+
 @custom-variant dark (&:where(.dark, .dark *));
 
 /* ------------------------------------------------------------------------

@@ -18,6 +18,7 @@ import { useRoomChannel, type RoomChange, type RoomTable } from "@/lib/realtime/
 import { roomMode } from "@/lib/room-modes";
 import { getSupabase } from "@/lib/supabase/client";
 import type { BookRow, Marker, RoomDetail, RoomMember } from "@/lib/types";
+import { useReadingCoverage } from "./use-reading-coverage";
 import { NoteComposer } from "./composer";
 import { EpubViewer } from "./epub-viewer";
 import { MarkerButton, NoteThread, QUICK_REACTIONS, TrailList, type People } from "./notes";
@@ -299,6 +300,10 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
     onCompleted: useCallback(() => setFinished(true), []),
   });
 
+  const completion = useCallback(() => setFinished(true), []);
+  const reading = useReadingCoverage({ roomId: initialRoom.id, userId: me.user_id, location,
+    paused: !ready || archived || Boolean(panel || activeNote || composer), initial: initialRoom.my, onCompleted: completion });
+
   const onRelocate = useCallback(
     (next: ViewerLocation) => {
       setLocation(next);
@@ -360,8 +365,8 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
 
   // My own avatar should move the instant I turn a page, not after the round trip.
   const trackMembers = useMemo(
-    () => members.map((m) => (m.user_id === me.user_id ? { ...m, furthest: Math.max(m.furthest, furthest), label: location?.label ?? m.label } : m)),
-    [members, me.user_id, furthest, location?.label],
+    () => members.map((m) => (m.user_id === me.user_id ? { ...m, ...reading.stats, position: location?.progress ?? m.position, furthest: Math.max(m.furthest, furthest), label: location?.label ?? m.label } : m)),
+    [members, me.user_id, furthest, location, reading.stats],
   );
 
   // ------------------------------------------------------------ markers for the viewer
@@ -373,6 +378,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
         return {
           id: marker.id,
           authorId: marker.author_id,
+          attention: marker.attention,
           anchor: marker.anchor,
           position: marker.position,
           open,
@@ -405,9 +411,9 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
     (marker: ViewerMarker) => {
       const source = markerById.get(marker.id);
       if (!source) return null;
-      return <MarkerButton marker={marker} author={personOf(marker.authorId)} onOpen={() => openNote(source)} />;
+      return <MarkerButton marker={marker} author={personOf(marker.authorId)} onOpen={() => openNote(source)} viewerId={me.user_id} bundle={annotations.notes.get(marker.id)} onPreview={() => { void loadNotes([marker.id]); void markSeen([marker.id]); }} />;
     },
-    [markerById, openNote, personOf],
+    [markerById, openNote, personOf, me.user_id, annotations.notes, loadNotes, markSeen],
   );
 
   // Deep link from a notification: /read/{room}?note={marker}
@@ -469,6 +475,8 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
         data-ready={ready ? "true" : "false"}
         data-save-status={saveStatus}
         data-progress={progressNow.toFixed(4)}
+        data-read-coverage={reading.stats.read_coverage ?? 0}
+        data-reading-state={reading.state}
         data-furthest={furthest.toFixed(4)}
         data-live={liveStatus}
         data-reader-theme={theme}
@@ -573,6 +581,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
                     settings={settings}
                     initialAnchor={initialAnchor}
                     markers={viewerMarkers}
+                    draftAnchor={composer?.anchor}
                     renderMarker={renderMarker}
                     onReady={(info) => {
                       setToc(info.toc);
@@ -595,6 +604,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
                     settings={settings}
                     initialAnchor={initialAnchor}
                     markers={viewerMarkers}
+                    draftAnchor={composer?.anchor}
                     renderMarker={renderMarker}
                     onReady={(info) => {
                       setToc(info.toc);
@@ -663,14 +673,21 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
           )}
           inert={!chrome}
         >
-          <span className="text-[11px] tabular-nums text-ink-soft">{formatPercent(progressNow)}</span>
+          <span className="flex flex-col items-center text-[11px] tabular-nums text-ink-soft" aria-label={`${formatPercent(reading.stats.read_coverage ?? 0)} read`}>
+            {formatPercent(reading.stats.read_coverage ?? 0)}<span className="text-[9px]">read</span>
+          </span>
           <ProgressTrack members={trackMembers} meId={me.user_id} mode={mode} markers={trackMarkers} liveIds={readingNow} size="sm" orientation="vertical" className="flex-1" />
           <Popover>
             <PopoverTrigger className="reader-tool" aria-label="Reading status">
               {saveStatus === "error" || liveStatus === "offline" ? <WifiOff className="size-4 text-danger" aria-hidden /> : <BookOpenCheck className="size-4" aria-hidden />}
             </PopoverTrigger>
             <PopoverContent side="right" className="w-64 text-sm text-ink-soft">
-              <p>{formatPercent(progressNow)} through the book</p>
+              <p className="font-medium text-ink">{formatPercent(reading.stats.read_coverage ?? 0)} read · {formatPercent(progressNow)} reached</p>
+              <p className="capitalize">{reading.state}{reading.state === "paused" ? " · time isn’t counting" : ""}</p>
+              <p>{Math.round(reading.stats.estimated_wpm ?? 240)} words/min · {(reading.stats.pace_samples ?? 0) > 0 ? "adapting to your pace" : "learning your pace"}</p>
+              <p>{Math.floor((reading.stats.active_reading_seconds ?? 0) / 60)} min of active reading</p>
+              <p className="text-xs leading-relaxed">Time on visible passages builds reading credit. Returning adds credit; skipping to the end won’t finish the book.</p>
+              {reading.pending && <p className="text-xs text-ink-soft">Reading time saved on this device, waiting to sync.</p>}
               {aheadCount > 0 && <p className="mt-2">{plural(aheadCount, "thing")} waiting ahead</p>}
               {readingNow.size > 1 && <p className="mt-2">{plural(readingNow.size - 1, "friend")} reading now</p>}
               <p className="mt-2">{saveStatus === "error" ? "Place not saved yet — retrying" : liveStatus === "offline" ? "Reconnecting" : "Your place saves as you read."}</p>
@@ -793,6 +810,8 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
             {composer && (
               <NoteComposer
                 selection={composer}
+                members={members}
+                meId={me.user_id}
                 annotations={annotations}
                 onDone={() => {
                   setComposer(null);
@@ -804,7 +823,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
         </Sheet>
 
         <Dialog open={finished} onOpenChange={setFinished}>
-          <DialogContent title="You finished the book" description={`That's the last page of ${book.title}.`}>
+          <DialogContent title="You finished the book" description={`You’ve read through ${book.title}, including its ending.`}>
             <div className="flex flex-col items-center text-center">
               <span className="flex size-16 animate-pop-in items-center justify-center rounded-full bg-gold-soft text-gold">
                 <BookOpenCheck className="size-8" aria-hidden />

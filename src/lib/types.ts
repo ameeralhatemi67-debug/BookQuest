@@ -55,7 +55,16 @@ export interface BookRow extends BookSummary {
   created_at: string;
 }
 
-export interface RoomMember {
+export interface ReadingStats {
+  read_coverage?: number;
+  estimated_wpm?: number;
+  pace_samples?: number;
+  active_reading_seconds?: number;
+}
+
+export type NoteAttention = "quiet" | "gentle" | "playful";
+
+export interface RoomMember extends ReadingStats {
   user_id: string;
   display_name: string;
   avatar_path: string | null;
@@ -69,7 +78,7 @@ export interface RoomMember {
   completed_at: string | null;
 }
 
-export interface MyProgress {
+export interface MyProgress extends ReadingStats {
   position: number;
   furthest: number;
   label: string | null;
@@ -156,6 +165,8 @@ export interface RoomInvite {
 
 // ---------------------------------------------------------------- annotations
 export interface Marker {
+  attention: NoteAttention;
+  recipient_id: string | null;
   id: string;
   room_id: string;
   book_id: string;

@@ -17,6 +17,9 @@ export interface EpubAnchor {
   type: "epub";
   /** CFI of the start of the location (resume point / marker position). */
   cfi: string;
+  /** Exact double-tap point within the visible page. */
+  x?: number;
+  y?: number;
   /** CFI range of a highlighted passage, when the note is attached to a selection. */
   cfiRange?: string;
   /** Spine href of the chapter, used for the label and as a navigation fallback. */
@@ -54,7 +57,7 @@ export interface BookLocation {
   anchor: Anchor;
 }
 
-/** Progress at or beyond which a book counts as finished (mirrors save_progress in SQL). */
+/** Display rounding at the end of the book. Earned completion uses completed_at. */
 export const COMPLETION_THRESHOLD = 0.995;
 
 export function clamp01(value: number): number {
@@ -67,6 +70,7 @@ export function roundProgress(value: number): number {
   return Math.round(clamp01(value) * 1_000_000) / 1_000_000;
 }
 
+/** @deprecated Position alone cannot establish completion. Read completed_at instead. */
 export function isComplete(progress: number): boolean {
   return progress >= COMPLETION_THRESHOLD;
 }

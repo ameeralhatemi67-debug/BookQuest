@@ -103,6 +103,7 @@ export function SheetContent({
 // ---------------------------------------------------------------- Popover
 export const Popover = RPopover.Root;
 export const PopoverTrigger = RPopover.Trigger;
+export const PopoverArrow = RPopover.Arrow;
 export const PopoverAnchor = RPopover.Anchor;
 export const PopoverClose = RPopover.Close;
 

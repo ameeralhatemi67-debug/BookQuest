@@ -58,7 +58,7 @@ describe("spoiler lock: authorization, not decoration", () => {
       expect(markers.every((m) => m.author_id === amir.id)).toBe(true);
       // The marker table structurally cannot leak: it has no payload columns.
       expect(Object.keys(markers[0]).sort()).toEqual(
-        ["anchor", "author_id", "book_id", "created_at", "id", "location_label", "position", "published_at", "removed_at", "removed_by", "room_id"],
+        ["anchor", "attention", "author_id", "book_id", "created_at", "id", "location_label", "position", "published_at", "recipient_id", "removed_at", "removed_by", "room_id"],
       );
       for (const marker of markers) {
         expect(JSON.stringify(marker)).not.toMatch(/did NOT see|map|😱|example\.com|butler/);
@@ -345,7 +345,7 @@ describe("progress and the group", () => {
     expect((await w.read(sara, room, 0.1)).furthest).toBe(0.31);
     const over = await w.read(readers[3], room, 7);
     expect(over.furthest).toBe(1);
-    expect(over.completed).toBe(true);
+    expect(over.completed).toBe(false);
   });
 
   it("records meaningful activity only: start, milestones, finish — not page turns", async () => {
@@ -395,6 +395,8 @@ describe("progress and the group", () => {
 
   it("announces a finish to the room exactly once", async () => {
     const noor = readers[3];
+    await w.owner("update public.reading_progress set coverage_sampled_at = now()-interval '300 seconds' where user_id=$1 and room_id=$2", [noor.id, room]);
+    await w.rpc(noor, "record_reading_session", { p_room_id: room, p_samples: [{ id: crypto.randomUUID(), start: 0, end: 1, words: 600, seconds: 300, kind: "reading" }] });
     await w.read(noor, room, 1);
     await w.read(noor, room, 1);
     expect((await activity("finished")).filter((a) => a.actor_id === noor.id)).toHaveLength(1);

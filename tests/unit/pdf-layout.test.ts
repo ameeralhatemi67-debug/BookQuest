@@ -29,7 +29,8 @@ it("fits complete single pages and paired spreads, including phones, mixed sizes
   const portrait = Array.from({ length: 2 }, () => ({ width: 612, height: 792 }));
   for (const zoom of [1, 1.2]) {
     const fitted = pdfLayout(portrait, 1304, 796, zoom);
-    expect(fitted.heights[0]).toBeCloseTo(764);
+    expect(fitted.heights[0]).toBeGreaterThan(796 * 0.94);
+    if (zoom === 1.2) expect(fitted.lefts[1] - fitted.lefts[0] - fitted.widths[0]).toBeCloseTo(44);
     expect(fitted.lefts[0]).toBeGreaterThanOrEqual(48);
     expect(fitted.lefts[zoom === 1.2 ? 1 : 0] + fitted.widths[0]).toBeLessThanOrEqual(1304 - 48);
   }

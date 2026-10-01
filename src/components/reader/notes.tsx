@@ -7,7 +7,7 @@ import { Avatar, personHue, type AvatarPerson } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input, Textarea } from "@/components/ui/field";
 import { Spinner } from "@/components/ui/misc";
-import { Menu, MenuContent, MenuItem, MenuTrigger, Popover, PopoverContent, PopoverTrigger, SheetClose } from "@/components/ui/overlay";
+import { Menu, MenuContent, MenuItem, MenuTrigger, Popover, PopoverArrow, PopoverContent, PopoverTrigger, SheetClose } from "@/components/ui/overlay";
 import { cn, isEmojiOnly, plural, timeAgo } from "@/lib/format";
 import { getSupabase } from "@/lib/supabase/client";
 import type { Marker } from "@/lib/types";
@@ -40,10 +40,16 @@ export function MarkerButton({
   marker,
   author,
   onOpen,
+  onPreview,
+  bundle,
+  viewerId,
 }: {
   marker: ViewerMarker;
   author: AvatarPerson;
   onOpen: () => void;
+  onPreview: () => void;
+  bundle?: NoteBundle;
+  viewerId: string;
 }) {
   const hue = personHue(marker.authorId);
   const first = author.display_name.split(" ")[0];
@@ -70,19 +76,135 @@ export function MarkerButton({
     );
   }
 
+  return <OpenMarker marker={marker} author={author} onOpen={onOpen} onPreview={onPreview} bundle={bundle} viewerId={viewerId} />;
+}
+
+function OpenMarker({ marker, author, onOpen, onPreview, bundle, viewerId }: {
+  marker: ViewerMarker; author: AvatarPerson; onOpen: () => void; onPreview: () => void; bundle?: NoteBundle; viewerId: string;
+}) {
+  const key = `marginalia:note-rest:${viewerId}:${marker.id}`;
+  const [sleepUntil, setSleepUntil] = useState(() => {
+    try { const until = Number(localStorage.getItem(key)) || 0; return until > Date.now() ? until : 0; } catch { return 0; }
+  });
+  const [bubble, setBubble] = useState(false);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [dragging, setDragging] = useState(false);
+  const drag = useRef<null | { x: number; y: number; ox: number; oy: number; minX: number; maxX: number; minY: number; maxY: number; lastX: number; direction: number; turns: number; travel: number; moved: boolean }>(null);
+  const clickTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastClick = useRef(0);
+  const suppressClick = useRef(false);
+  const sleeping = sleepUntil > 0;
   const isNew = marker.fresh || !marker.seen;
+  useEffect(() => {
+    if (!sleeping) return;
+    const timer = setTimeout(() => setSleepUntil(0), Math.max(1, sleepUntil - Date.now()));
+    return () => clearTimeout(timer);
+  }, [sleeping, sleepUntil]);
+  useEffect(() => () => { if (clickTimer.current) clearTimeout(clickTimer.current); }, []);
+  const snooze = () => {
+    const until = Date.now() + 5 * 60_000;
+    setSleepUntil(until);
+    try { localStorage.setItem(key, String(until)); } catch { /* optional device preference */ }
+  };
+  const showPreview = () => { setBubble(true); onPreview(); };
   return (
+    <Popover open={bubble} onOpenChange={setBubble}>
+    <PopoverTrigger asChild>
     <button
       type="button"
-      onClick={onOpen}
-      className="group flex size-11 items-center justify-center rounded-full"
+      data-note-avatar={marker.id}
+      data-attention={sleeping || dragging || bubble ? "quiet" : marker.attention ?? "gentle"}
+      data-sleeping={sleeping}
+      style={{ transform: `translate(${offset.x}px, ${offset.y}px)`, touchAction: "none" }}
+      onPointerDown={event => {
+        if (event.button !== 0) return;
+        const button = event.currentTarget;
+        const surface = button.closest<HTMLElement>("[data-note-surface]");
+        if (!surface) return;
+        event.preventDefault();
+        button.setPointerCapture(event.pointerId);
+        const box = surface.getBoundingClientRect();
+        const avatar = button.getBoundingClientRect();
+        let right = Math.min(box.right + 40, window.innerWidth - 4);
+        for (const peer of document.querySelectorAll<HTMLElement>("[data-note-surface]")) {
+          if (peer === surface) continue;
+          const other = peer.getBoundingClientRect();
+          if (other.left >= box.right && other.top < box.bottom && other.bottom > box.top) right = Math.min(right, other.left - 4);
+        }
+        drag.current = { x: event.clientX, y: event.clientY, ox: offset.x, oy: offset.y,
+          minX: offset.x + box.left - avatar.left, maxX: offset.x + right - avatar.right,
+          minY: offset.y + box.top - avatar.top, maxY: offset.y + box.bottom - avatar.bottom,
+          lastX: event.clientX, direction: 0, turns: 0, travel: 0, moved: false };
+      }}
+      onPointerMove={event => {
+        const d = drag.current;
+        if (!d) return;
+        const dx = event.clientX - d.x, dy = event.clientY - d.y;
+        if (Math.hypot(dx, dy) > 6) d.moved = true;
+        if (!d.moved) return;
+        setDragging(true);
+        setBubble(false);
+        const step = event.clientX - d.lastX;
+        if (Math.abs(step) > 7) {
+          const direction = Math.sign(step);
+          if (d.direction && direction !== d.direction) d.turns++;
+          d.direction = direction; d.travel += Math.abs(step); d.lastX = event.clientX;
+        }
+        setOffset({ x: Math.min(d.maxX, Math.max(d.minX, d.ox + dx)), y: Math.min(d.maxY, Math.max(d.minY, d.oy + dy)) });
+      }}
+      onPointerUp={event => {
+        const d = drag.current;
+        if (d?.moved) {
+          suppressClick.current = true;
+          if (d.turns >= 3 && d.travel >= 80) snooze();
+        }
+        drag.current = null;
+        setDragging(false);
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+      }}
+      onPointerCancel={() => { drag.current = null; suppressClick.current = false; setDragging(false); }}
+      onClick={event => {
+        event.preventDefault(); // the controlled popover waits to distinguish single and double taps
+        if (suppressClick.current) { suppressClick.current = false; return; }
+        if (event.detail === 0) return showPreview();
+        const now = Date.now();
+        if (clickTimer.current) clearTimeout(clickTimer.current);
+        if (now - lastClick.current < 330 || event.detail > 1) {
+          lastClick.current = 0; setBubble(false); onOpen();
+        } else {
+          lastClick.current = now; clickTimer.current = setTimeout(showPreview, 330);
+        }
+      }}
+      className="note-avatar group flex size-11 cursor-grab items-center justify-center rounded-full active:cursor-grabbing"
       aria-label={`${isNew ? "New: " : ""}Open what ${author.display_name} left here`}
+      aria-describedby={`note-help-${marker.id}`}
     >
-      <span className={cn("relative rounded-full transition-transform group-hover:scale-110", marker.fresh ? "animate-unlock" : "animate-marker-in")}>
-        <Avatar person={author} size={28} className={cn("rounded-full shadow-soft", isNew && "outline outline-2 outline-offset-1 outline-gold")} />
+      <span className="note-avatar-face relative rounded-full">
+        <Avatar person={author} size={32} className={cn("rounded-full shadow-soft", isNew && "outline outline-2 outline-offset-1 outline-gold")} />
         {isNew && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-gold ring-2 ring-[var(--page)]" aria-hidden />}
+        {sleeping && <span className="absolute -right-1 -top-2 text-[10px] font-semibold text-ink-faint" aria-hidden>zZ</span>}
       </span>
     </button>
+    </PopoverTrigger>
+    <span className="sr-only" id={`note-help-${marker.id}`}>Tap to read. Double tap to reply. Drag within this page; wiggle to snooze for five minutes.</span>
+    <PopoverContent side="left" sideOffset={10} className="note-speech w-[min(320px,calc(100vw-24px))] rounded-[24px] p-4" aria-label={`Note from ${author.display_name}`} onOpenAutoFocus={e => e.preventDefault()}>
+      <PopoverArrow width={18} height={10} className="fill-raised" />
+      <div className="mb-3 flex items-center gap-2"><Avatar person={author} size={24} /><span className="text-sm font-medium text-ink">{author.display_name}</span><button className="ml-auto flex size-8 items-center justify-center rounded-full hover:bg-sunk" aria-label="Close note preview" onClick={() => setBubble(false)}><X className="size-4" /></button></div>
+      <div className="scroll-slim max-h-[min(45dvh,360px)] space-y-3 overflow-y-auto">
+        {!bundle || bundle.status === "loading" ? <Spinner /> : bundle.status === "unavailable" ? <p role="alert" className="text-sm text-ink-soft">This note couldn’t load. Close it and try again.</p> : <>
+          {bundle.content?.quote && <blockquote className="border-l-2 border-accent/50 pl-2 font-display text-sm italic text-ink-soft">{bundle.content.quote}</blockquote>}
+          {bundle.content?.emoji && <p className="text-2xl">{bundle.content.emoji}</p>}
+          {bundle.content?.body && <p className="whitespace-pre-wrap break-words text-sm leading-relaxed text-ink">{bundle.content.body}</p>}
+          {bundle.content?.link_url && <a href={bundle.content.link_url} target="_blank" rel="noreferrer" className="block break-all text-sm text-accent-ink underline">{hostOf(bundle.content.link_url)}</a>}
+          {bundle.attachments.map(a => <AttachmentView key={a.id} attachment={a} />)}
+        </>}
+      </div>
+      <div className="mt-4 flex items-center justify-between gap-2 border-t border-line pt-3">
+        <Button size="sm" onClick={() => { setBubble(false); onOpen(); }}>Reply to this note</Button>
+        <button className="min-h-11 text-xs text-ink-soft underline-offset-4 hover:underline" onClick={snooze}>{sleeping ? "Snoozed · 5 min" : "Snooze 5 min"}</button>
+      </div>
+    </PopoverContent>
+    </Popover>
   );
 }
 

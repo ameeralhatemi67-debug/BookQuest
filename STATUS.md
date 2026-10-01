@@ -12,11 +12,19 @@ PDFs use the owner-confirmed 20–120% book-view range. The default 100% fits on
 
 ## Hosted state
 
+Note avatars now have Quiet, Gentle and Playful attention levels. A single click/tap opens an anchored speech bubble; double-click/tap opens the reply thread. Dragging stays within the note’s original page, and wiggling or the accessible snooze button rests the avatar for five minutes. Reduced-motion settings suppress animation. Exact pins identify selections and page taps, including while composing; paired PDF pages reserve a 44 px note gutter. Desktop progress avatars morph into a drop pointing toward their actual rail position, with a stable hover target; phones keep the tap interaction.
+
+New notes default to the whole room, with Only me and individual-reader choices. Database checks enforce the audience across markers, content, attachment downloads, unlocks, notifications, room counts and Journey summaries. Spoiler locks still apply to the chosen reader.
+
+Reading coverage now uses timed visible passages, word counts, an adaptive pace estimate, scan detection, backtracking and cumulative revisit credit. It pauses for hidden/unfocused tabs, overlays and inactivity based on passage length. Browsing position, note unlocks and historical completion records are preserved separately. New completion requires at least 90% earned coverage and credit for the final section; reaching the last page alone cannot finish. Offline samples survive reload and retry, with receipts preventing duplicate credit and server wall-clock limits bounding accepted time. Reading credit estimates attention, not comprehension.
+
 Supabase is connected with committed migrations and private buckets. Vercel public variables and auth URLs/templates are configured. Direct signup is enabled with owner approval for this code-gated alpha. Two owner-designated admin accounts are active; private one-use setup links are kept outside Git. The friend code is limited to 20 uses and 30 days. The effective hosted file cap is 50 MB.
 
 ## Verification
 
 - Unit, database/RLS and emulator integration: **173 passing**.
+- The animated-note and reading-coverage update passes **176 unit/database/integration checks** (61/97/18). Hosted migration `20261001090807_note_attention_and_reading_coverage.sql` is applied; anonymous callers cannot create notes or claim reading credit, and clients cannot read the private coverage ledger.
+- **53 distinct reader browser cases** passed across the final successful runs: Duo, Group, PDF, both responsive projects, drawing/page fit, animated notes on desktop and touch in both formats, and reading coverage with an interrupted connection. The new note tests also exercise the five-minute timer and desktop-only drop hover.
 - TypeScript, ESLint and production build: clean.
 - **62 desktop browser cases and 7 mobile cases** passed across the local Chromium runs: Duo, Group, room visibility/authorization, PDF, upload, management, recovery, voice/video, responsive and soundtrack checks. See TESTING.md for reproducible commands.
 - The 64 MB local upload passes pause/resume, connection interruption, cancellation and full stored-file hash verification.

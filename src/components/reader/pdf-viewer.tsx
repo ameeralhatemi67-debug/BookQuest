@@ -31,12 +31,13 @@ interface PageProps {
   width: number;
   height: number;
   scale: number;
+  onTextReady: () => void;
   onSize: (pageNumber: number, size: Size) => void;
   children?: ReactNode;
 }
 
 /** One rendered page: canvas underneath, invisible selectable text on top. */
-const PdfPage = memo(function PdfPage({ doc, pageNumber, top, left, width, height, scale, onSize, children }: PageProps) {
+const PdfPage = memo(function PdfPage({ doc, pageNumber, top, left, width, height, scale, onSize, onTextReady, children }: PageProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const textRef = useRef<HTMLDivElement>(null);
   const [failed, setFailed] = useState(false);
@@ -81,6 +82,7 @@ const PdfPage = memo(function PdfPage({ doc, pageNumber, top, left, width, heigh
       const end = document.createElement("div");
       end.className = "endOfContent";
       textHost.append(end);
+      onTextReady();
     })().catch((error: unknown) => {
       if (cancelled || (error as { name?: string })?.name === "RenderingCancelledException") return;
       setFailed(true);
@@ -91,11 +93,12 @@ const PdfPage = memo(function PdfPage({ doc, pageNumber, top, left, width, heigh
       task?.cancel();
       textLayer?.cancel();
     };
-  }, [doc, pageNumber, scale, onSize]);
+  }, [doc, pageNumber, scale, onSize, onTextReady]);
 
   return (
     <div
       data-page={pageNumber}
+      data-note-surface
       className="pdf-page absolute bg-[var(--page)] shadow-soft"
       style={{ top, left, width, height, touchAction: "manipulation" }}
       aria-label={`Page ${pageNumber}`}
@@ -125,7 +128,7 @@ function HighlightRects({ rects, hue }: { rects: NormRect[]; hue: number }) {
 }
 
 export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewer(
-  { url, settings, initialAnchor, markers, renderMarker, onReady, onRelocate, onSelection, onAddNote, onError, onLoadProgress },
+  { url, settings, initialAnchor, markers, draftAnchor, renderMarker, onReady, onRelocate, onSelection, onAddNote, onError, onLoadProgress },
   ref,
 ) {
   const scroller = useRef<HTMLDivElement>(null);
@@ -247,7 +250,14 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
 
     if (!restored.current) return; // don't report the pre-restore position as progress
     currentAnchor.current = { type: "pdf", page: state.page, y: Math.round(state.offset * 10000) / 10000 };
+    const viewport = element.getBoundingClientRect();
+    let visibleWords = 0;
+    for (const text of element.querySelectorAll<HTMLElement>(".pdf-text-layer span")) {
+      const box = text.getBoundingClientRect();
+      if (box.bottom > viewport.top && box.top < viewport.bottom && box.right > viewport.left && box.left < viewport.right) visibleWords += text.textContent?.match(/\S+/g)?.length ?? 0;
+    }
     callbacks.current.onRelocate({
+      visibleWords,
       progress: state.progress,
       reach: state.reach,
       label: pdfLabel(state.page, tops.length),
@@ -453,7 +463,8 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
             const pageMarkers = markersByPage.get(page) ?? [];
             let lastTop = -1;
             return (
-              <PdfPage key={page} doc={doc} pageNumber={page} top={layout.tops[page - 1]} left={layout.lefts[page - 1]} width={layout.widths[page - 1]} height={layout.heights[page - 1]} scale={layout.scales[page - 1]} onSize={onSize}>
+              <PdfPage key={page} doc={doc} pageNumber={page} top={layout.tops[page - 1]} left={layout.lefts[page - 1]} width={layout.widths[page - 1]} height={layout.heights[page - 1]} scale={layout.scales[page - 1]} onSize={onSize} onTextReady={report}>
+                {isPdfAnchor(draftAnchor) && draftAnchor.page === page && <span data-note-pin="draft" className="note-pin note-pin-draft" style={{ left: `${(draftAnchor.x ?? draftAnchor.rects?.[0]?.x ?? 0.5) * 100}%`, top: `${(draftAnchor.y ?? draftAnchor.rects?.[0]?.y ?? 0) * 100}%` }} aria-hidden /> }
                 {pageMarkers.map((marker) => {
                   const anchor = marker.anchor as PdfAnchor;
                   const y = anchor.rects?.length ? anchor.rects[0].y : (anchor.y ?? 0);
@@ -463,8 +474,9 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
                   lastTop = top;
                   return (
                     <div key={marker.id}>
+                      {marker.open && <span data-note-pin={marker.id} className="note-pin" style={{ left: `${(anchor.x ?? anchor.rects?.[0]?.x ?? 0.5) * 100}%`, top: `${y * 100}%`, background: `oklch(0.62 0.12 ${personHue(marker.authorId)})` }} aria-hidden />}
                       {marker.open && anchor.rects && <HighlightRects rects={anchor.rects} hue={personHue(marker.authorId)} />}
-                      <div className="absolute right-0 z-[3] translate-x-1/3 sm:translate-x-[85%]" style={{ top: Math.max(0, top - 8) }}>
+                      <div className="absolute right-0 z-[3] translate-x-1/3 sm:translate-x-[85%]" style={{ top: Math.min(layout.heights[page - 1] - 44, Math.max(0, top - 8)) }}>
                         {renderMarker(marker)}
                       </div>
                     </div>

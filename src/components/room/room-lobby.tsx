@@ -18,7 +18,7 @@ import { Badge, Card, SectionHeading } from "@/components/ui/misc";
 import { Dialog, DialogContent, Menu, MenuContent, MenuItem, MenuTrigger } from "@/components/ui/overlay";
 import { friendlyError } from "@/lib/errors";
 import { cn, plural, timeAgo } from "@/lib/format";
-import { formatPercent, isComplete } from "@/lib/location";
+import { formatPercent } from "@/lib/location";
 import { standings } from "@/lib/progress-track";
 import { useRoomChannel, type RoomTable } from "@/lib/realtime/use-room-channel";
 import { roomMode } from "@/lib/room-modes";
@@ -122,8 +122,8 @@ export function RoomLobby({ initial, initialExtras, welcome }: { initial: RoomDe
   const people = useMemo(() => new Map<string, ActivityPerson>(room.people.map((p) => [p.user_id, p])), [room.people]);
   const ranked = useMemo(() => standings(room.members.map((m) => ({ ...m, id: m.user_id, progress: m.furthest }))), [room.members]);
   const started = Boolean(room.my && room.my.furthest > 0);
-  const finished = isComplete(room.my?.furthest ?? 0);
-  const everyoneFinished = room.members.length > 0 && room.members.every((m) => isComplete(m.furthest));
+  const finished = Boolean(room.my?.completed_at);
+  const everyoneFinished = room.members.length > 0 && room.members.every((m) => Boolean(m.completed_at));
 
   async function act(action: () => PromiseLike<{ error: unknown }>, success?: string) {
     setBusy(true);
@@ -230,7 +230,7 @@ export function RoomLobby({ initial, initialExtras, welcome }: { initial: RoomDe
                   {reader.display_name}
                   {reader.id === me.user_id && <span className="ml-1 font-normal text-ink-faint">(you)</span>}
                 </span>
-                <span className="text-sm tabular-nums text-ink-soft">{isComplete(reader.furthest) ? "Finished" : formatPercent(reader.furthest)}</span>
+                <span className="text-sm tabular-nums text-ink-soft">{Boolean(reader.completed_at) ? "Finished" : formatPercent(reader.furthest)}</span>
                 <span className="w-20 text-right text-xs tabular-nums text-ink-faint">{rank === 1 || behindLeader === 0 ? "in front" : `${behindLeader}% back`}</span>
               </li>
             ))}
@@ -250,7 +250,7 @@ export function RoomLobby({ initial, initialExtras, welcome }: { initial: RoomDe
             {room.members.map((member) => {
               const isMe = member.user_id === me.user_id;
               const canManage = !isMe && member.role !== "owner" && (isOwner || (isStaff && member.role === "member"));
-              const done = isComplete(member.furthest);
+              const done = Boolean(member.completed_at);
               return (
                 <div key={member.user_id} className="flex items-center gap-3 py-3">
                   <Avatar person={{ id: member.user_id, display_name: member.display_name, avatar_path: member.avatar_path }} size={40} live={readingNow.has(member.user_id)} />

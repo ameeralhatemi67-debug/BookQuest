@@ -12,7 +12,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Avatar, personHue } from "@/components/ui/avatar";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/overlay";
 import { cn, timeAgo } from "@/lib/format";
-import { clamp01, formatPercent, isComplete } from "@/lib/location";
+import { clamp01, formatPercent } from "@/lib/location";
 import { layoutTrack, type TrackCluster } from "@/lib/progress-track";
 import type { RoomMode } from "@/lib/room-modes";
 import type { RoomMember } from "@/lib/types";
@@ -46,7 +46,7 @@ function useElementLength<T extends HTMLElement>(vertical: boolean): [React.RefO
 
 function describe(member: RoomMember, mode: RoomMode, isMe: boolean, live: boolean): string {
   const parts = [isMe ? `${member.display_name} (you)` : member.display_name];
-  if (isComplete(member.furthest)) parts.push("finished the book");
+  if (Boolean(member.completed_at)) parts.push("finished the book");
   else if (member.furthest <= 0) parts.push("hasn't started yet");
   else {
     if (mode.progress.showPercent) parts.push(`${formatPercent(member.furthest)} through`);
@@ -57,7 +57,7 @@ function describe(member: RoomMember, mode: RoomMode, isMe: boolean, live: boole
 }
 
 function ReaderLine({ member, mode, isMe, live }: { member: RoomMember; mode: RoomMode; isMe: boolean; live: boolean }) {
-  const finished = isComplete(member.furthest);
+  const finished = Boolean(member.completed_at);
   return (
     <li className="flex items-center gap-3 py-1.5">
       <Avatar person={{ id: member.user_id, display_name: member.display_name, avatar_path: member.avatar_path }} size={32} live={live} />
@@ -74,7 +74,9 @@ function ReaderLine({ member, mode, isMe, live }: { member: RoomMember; mode: Ro
       {finished ? (
         <Check className="size-4 text-moss" aria-label="Finished" />
       ) : (
-        mode.progress.showPercent && member.furthest > 0 && <span className="text-sm tabular-nums text-ink-soft">{formatPercent(member.furthest)}</span>
+        mode.progress.showPercent && member.furthest > 0 && <span className="flex flex-col items-end text-sm tabular-nums text-ink-soft">
+          <span>{formatPercent(member.position)}</span><span className="text-[10px]">{formatPercent(member.read_coverage ?? 0)} read</span>
+        </span>
       )}
     </li>
   );
@@ -87,6 +89,7 @@ function Cluster({
   liveIds,
   avatarSize,
   vertical,
+  railLength,
 }: {
   cluster: TrackCluster<TrackMember>;
   meId: string;
@@ -94,6 +97,7 @@ function Cluster({
   liveIds: Set<string>;
   avatarSize: number;
   vertical: boolean;
+  railLength: number;
 }) {
   // Draw the viewer last so they sit on top of a stack; cap what is drawn.
   const ordered = [...cluster.readers].sort((a, b) => Number(a.id === meId) - Number(b.id === meId));
@@ -130,13 +134,16 @@ function Cluster({
             return (
               <span
                 key={member.id}
+                style={{ "--reader-hue": personHue(member.user_id), "--reader-y": `${(member.progress - cluster.center) * railLength - (index - (visible.length - 1) / 2) * (avatarSize - 12)}px` } as React.CSSProperties}
                 className={cn(
                   "relative rounded-full transition-[margin] duration-300 ease-out",
+                  vertical && "progress-avatar-drop",
                   // Overlap when stacked; fan out on hover / keyboard focus.
                   (index > 0 || hidden > 0) && (vertical ? "-mt-5 group-hover/cluster:-mt-3 group-focus-visible/cluster:-mt-3" : "-ml-3 group-hover/cluster:-ml-0.5 group-focus-visible/cluster:-ml-0.5"),
                   isMe && "z-10",
                 )}
               >
+                <span className="progress-avatar-figure relative inline-flex">
                 <Avatar
                   person={{ id: member.user_id, display_name: member.display_name, avatar_path: member.avatar_path }}
                   size={avatarSize}
@@ -144,6 +151,7 @@ function Cluster({
                   live={liveIds.has(member.id)}
                   className={cn("shadow-soft", isMe && "rounded-full outline outline-2 outline-offset-2 outline-accent")}
                 />
+                </span>
               </span>
             );
           })}
@@ -184,11 +192,11 @@ export function ProgressTrack({
   const avatarSize = size === "lg" ? 36 : 26;
   const live = useMemo(() => liveIds ?? new Set<string>(), [liveIds]);
 
-  const readers = useMemo<TrackMember[]>(() => members.map((m) => ({ ...m, id: m.user_id, progress: m.furthest })), [members]);
+  const readers = useMemo<TrackMember[]>(() => members.map((m) => ({ ...m, id: m.user_id, progress: vertical ? m.position : m.furthest })), [members, vertical]);
   // Before the first measurement assume a phone-sized rail so nothing overlaps on first paint.
   const clusters = useMemo(() => layoutTrack(readers, { width: width || 280, avatarSize }), [readers, width, avatarSize]);
   const me = members.find((m) => m.user_id === meId);
-  const mine = clamp01(me?.furthest ?? 0);
+  const mine = clamp01(vertical ? me?.position ?? 0 : me?.furthest ?? 0);
 
   return (
     <div data-orientation={orientation} className={cn("w-full select-none", vertical && "h-full min-h-0", className)}>
@@ -220,7 +228,7 @@ export function ProgressTrack({
               />
             ))}
             {clusters.map((cluster) => (
-              <Cluster key={cluster.readers.map((r) => r.id).join("+")} cluster={cluster} meId={meId} mode={mode} liveIds={live} avatarSize={avatarSize} vertical={vertical} />
+              <Cluster key={cluster.readers.map((r) => r.id).join("+")} cluster={cluster} meId={meId} mode={mode} liveIds={live} avatarSize={avatarSize} vertical={vertical} railLength={width || 280} />
             ))}
           </div>
         </div>

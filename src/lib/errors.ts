@@ -25,6 +25,8 @@ const MESSAGES: Record<string, string> = {
   room_archived: "This room has been archived.",
   removed_from_room: "You were removed from this room. Ask the owner for a new invitation.",
   invalid_room_settings: "Those room settings aren't valid.",
+  invalid_recipient: "That reader is no longer in the room. Choose who can see your note again.",
+  invalid_attention: "Choose an attention level for your note.",
   too_many_members_for_duo: "A Private Duo can only have two readers. Remove members first.",
   limit_below_member_count: "The member limit can't be lower than the number of people already here.",
   owner_must_transfer: "Hand the room to someone else before leaving — or remove the other members first.",
