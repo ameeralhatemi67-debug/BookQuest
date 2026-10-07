@@ -1,7 +1,7 @@
 "use client";
 
 import type { RealtimeChannel } from "@supabase/supabase-js";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { getSupabase } from "@/lib/supabase/client";
 
 /** Ephemeral "who is here right now" state. Never persisted — durable progress lives in Postgres. */
@@ -12,7 +12,20 @@ export interface PresenceMeta {
   /** Rough progress (rounded), only sent occasionally. */
   progress?: number;
   label?: string;
+  /** Reading together: the friend this reader is paired with. */
+  together?: string | null;
 }
+
+/**
+ * Ephemeral room messages on the same channel. Never stored, never a
+ * notification: knocks, "read together" invitations, live page turns and
+ * "something changed, refetch" hints for tables that are not published.
+ */
+export type RoomSignal =
+  | { kind: "knock"; from: string; to?: string | null }
+  | { kind: "together"; from: string; to: string; action: "invite" | "accept" | "leave" }
+  | { kind: "turn"; from: string; progress: number }
+  | { kind: "changed"; from: string; what: "layer" };
 
 export type RoomTable =
   | "reading_progress" | "room_members" | "room_activity" | "annotation_markers" | "annotation_contents"
@@ -36,9 +49,14 @@ interface Options {
   /** The connection came back (or we are polling while it is down): re-read everything. */
   onResync: () => void;
   presence: PresenceMeta;
+  /** A signal from someone else in the room. */
+  onSignal?: (signal: RoomSignal) => void;
+  /** Send presence more often (reading together). */
+  fastPresence?: boolean;
 }
 
 const PRESENCE_MIN_INTERVAL = 15_000;
+const PRESENCE_FAST_INTERVAL = 2_500;
 const OFFLINE_POLL_INTERVAL = 30_000;
 
 /**
@@ -49,18 +67,18 @@ const OFFLINE_POLL_INTERVAL = 30_000;
  * working from Postgres: we poll gently while offline and do a full resync the
  * moment the channel is back.
  */
-export function useRoomChannel({ roomId, userId, tables, onChange, onResync, presence }: Options) {
+export function useRoomChannel({ roomId, userId, tables, onChange, onResync, presence, onSignal, fastPresence = false }: Options) {
   const [status, setStatus] = useState<ChannelStatus>("connecting");
   const [live, setLive] = useState<Map<string, PresenceMeta>>(new Map());
   const channelRef = useRef<RealtimeChannel | null>(null);
-  const handlers = useRef({ onChange, onResync });
+  const handlers = useRef({ onChange, onResync, onSignal });
   const latestPresence = useRef(presence);
   const lastTracked = useRef<{ at: number; key: string }>({ at: 0, key: "" });
   const tableKey = tables.join(",");
 
   useEffect(() => {
-    handlers.current = { onChange, onResync };
-  }, [onChange, onResync]);
+    handlers.current = { onChange, onResync, onSignal };
+  }, [onChange, onResync, onSignal]);
 
   useEffect(() => {
     const supabase = getSupabase();
@@ -102,9 +120,16 @@ export function useRoomChannel({ roomId, userId, tables, onChange, onResync, pre
       for (const [key, metas] of Object.entries(state)) {
         // Several tabs / devices for one person: "reading" wins.
         const meta = metas.find((m) => m.reading) ?? metas[0];
-        if (meta) next.set(key, { user_id: key, reading: Boolean(meta.reading), progress: meta.progress, label: meta.label });
+        if (meta) next.set(key, { user_id: key, reading: Boolean(meta.reading), progress: meta.progress, label: meta.label, together: meta.together ?? null });
       }
       setLive(next);
+    });
+
+    channel = channel.on("broadcast", { event: "signal" }, ({ payload }) => {
+      const signal = payload as RoomSignal | undefined;
+      // Ignore anything malformed or (paranoia) echoed back to us.
+      if (!signal || typeof signal !== "object" || !("kind" in signal) || signal.from === userId) return;
+      handlers.current.onSignal?.(signal);
     });
 
     channelRef.current = channel;
@@ -155,8 +180,9 @@ export function useRoomChannel({ roomId, userId, tables, onChange, onResync, pre
     if (!channel || status !== "live" || presenceKey === lastTracked.current.key) return;
 
     const previous = lastTracked.current.key ? (JSON.parse(lastTracked.current.key) as PresenceMeta) : null;
-    const urgent = !previous || previous.reading !== presence.reading;
-    const wait = urgent ? 0 : Math.max(0, PRESENCE_MIN_INTERVAL - (Date.now() - lastTracked.current.at));
+    const urgent = !previous || previous.reading !== presence.reading || previous.together !== presence.together;
+    const interval = fastPresence ? PRESENCE_FAST_INTERVAL : PRESENCE_MIN_INTERVAL;
+    const wait = urgent ? 0 : Math.max(0, interval - (Date.now() - lastTracked.current.at));
     const timer = setTimeout(() => {
       lastTracked.current = { at: Date.now(), key: presenceKey };
       void channel.track(latestPresence.current).catch(() => {});
@@ -164,7 +190,15 @@ export function useRoomChannel({ roomId, userId, tables, onChange, onResync, pre
     return () => clearTimeout(timer);
     // `presence` is fully captured by presenceKey.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [presenceKey, status]);
+  }, [presenceKey, status, fastPresence]);
 
-  return { status, live };
+  /** Fire-and-forget: a signal that cannot be delivered right now is simply dropped. */
+  const send = useCallback((signal: RoomSignal) => {
+    const channel = channelRef.current;
+    if (!channel || status !== "live") return false;
+    void channel.send({ type: "broadcast", event: "signal", payload: signal }).catch(() => {});
+    return true;
+  }, [status]);
+
+  return { status, live, send };
 }

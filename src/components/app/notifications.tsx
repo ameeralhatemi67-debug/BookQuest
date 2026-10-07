@@ -1,6 +1,6 @@
 "use client";
 
-import { Bell, BookOpenCheck, DoorOpen, Heart, KeyRound, Mail, MessageCircle, Settings2, ShieldCheck, Sparkles, UserMinus, UserPlus } from "lucide-react";
+import { Bell, BookOpenCheck, DoorOpen, Heart, KeyRound, Mail, MessageCircle, Settings2, ShieldCheck, Sparkles, UserMinus, UserPlus, Gift, PartyPopper } from "lucide-react";
 import Link from "next/link";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useMe } from "@/components/app/providers";
@@ -147,6 +147,21 @@ export function describeNotification(n: NotificationItem): Described {
       else if (changes.includes("visibility")) what = <>is now {VISIBILITY_INFO[String(n.data.visibility) as RoomVisibility]?.name.toLowerCase() ?? "different"}</>;
       return { icon: <Settings2 className={iconClass} aria-hidden />, text: <>{room} {what}.</>, href: roomHref };
     }
+    case "afterparty": {
+      const count = Number(n.data.count ?? 1);
+      const chapter = typeof n.data.label === "string" && n.data.label ? n.data.label : "A chapter";
+      return {
+        icon: <PartyPopper className={iconClass} aria-hidden />,
+        text: count > 1 ? <>Everyone in {room} is through {count} chapters. Their afterparties are open.</> : <>Everyone in {room} finished <Strong>{chapter}</Strong>. Its afterparty is open.</>,
+        href: n.room_id ? `/read/${n.room_id}?party=${Number(n.data.chapter_index ?? 0)}` : "/home",
+      };
+    }
+    case "package":
+      return {
+        icon: <Gift className={iconClass} aria-hidden />,
+        text: <>{who} wrapped a package for you{label} in {room}. It opens when you get there.</>,
+        href: n.room_id ? `/read/${n.room_id}` : "/home",
+      };
     default:
       return { icon: <DoorOpen className={iconClass} aria-hidden />, text: <>Something happened in {room}.</>, href: roomHref };
   }

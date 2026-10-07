@@ -4,6 +4,8 @@ import type { Anchor } from "@/lib/location";
 export type ReaderTheme = "light" | "sepia" | "dark";
 export type ReaderFont = "original" | "serif" | "sans";
 export type ReaderWidth = "narrow" | "medium" | "wide";
+/** Turn pages like a book, or scroll through them. */
+export type ReaderTurn = "flip" | "scroll";
 
 export interface ReaderSettings {
   theme: ReaderTheme;
@@ -15,9 +17,10 @@ export interface ReaderSettings {
   font: ReaderFont;
   /** PDF view range: 0.2 = enlarged book; 1 = full page; 1.2 = two pages. */
   zoom: number;
+  turn: ReaderTurn;
 }
 
-export const DEFAULT_SETTINGS: ReaderSettings = { theme: "light", fontSize: 110, lineHeight: 1.7, width: "medium", font: "serif", zoom: 1 };
+export const DEFAULT_SETTINGS: ReaderSettings = { theme: "light", fontSize: 110, lineHeight: 1.7, width: "medium", font: "serif", zoom: 1, turn: "flip" };
 
 export const FONT_SIZE = { min: 80, max: 180, step: 10 };
 export const LINE_HEIGHT = { min: 1.3, max: 2.1, step: 0.1 };
@@ -76,6 +79,10 @@ export interface ViewerSelection {
 /** A marker as the viewer needs to draw it. */
 export interface ViewerMarker {
   id: string;
+  /** note: a friend's note · package: wrapped for one friend · poll: a passage poll · echo: a note from an earlier reading */
+  kind?: "note" | "package" | "poll" | "echo";
+  /** A package's wrapping label, visible before it opens. */
+  title?: string | null;
   authorId: string;
   attention?: import("@/lib/types").NoteAttention;
   anchor: Anchor;

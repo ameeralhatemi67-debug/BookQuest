@@ -49,6 +49,9 @@ export async function startEmulator(options: EmulatorOptions = {}) {
     changeFeed: true,
     log,
   });
+  // The hosted alpha has 75 seats. A development emulator accumulates test
+  // accounts run after run, so it lifts that limit for itself only.
+  await db.pg.query("update public.app_settings set value = '1000000'::jsonb where key = 'alpha_seats'");
 
   const inbox: Mail[] = [];
   const chaos = { failNextPatches: 0 };

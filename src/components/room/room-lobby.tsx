@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, BookOpen, Crown, MoreHorizontal, ScrollText, Settings2, Shield, ShieldOff, UserMinus, UserPlus, WifiOff } from "lucide-react";
+import { ArrowLeft, BookOpen, Crown, MoreHorizontal, ScrollText, Settings2, Shield, ShieldOff, Stamp, UserMinus, UserPlus, WifiOff } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -12,6 +12,7 @@ import { InviteDialog } from "@/components/room/invite-dialog";
 import { ProgressTrack, type TrackMarker } from "@/components/room/progress-track";
 import { duoSentence, VisibilityBadge, WaitingChips } from "@/components/room/room-card";
 import { RoomSettingsDialog } from "@/components/room/room-settings";
+import { RoomMoments } from "@/components/room/rituals-panel";
 import { Avatar } from "@/components/ui/avatar";
 import { Button, buttonClass } from "@/components/ui/button";
 import { Badge, Card, SectionHeading } from "@/components/ui/misc";
@@ -21,9 +22,9 @@ import { cn, plural, timeAgo } from "@/lib/format";
 import { formatPercent } from "@/lib/location";
 import { standings } from "@/lib/progress-track";
 import { useRoomChannel, type RoomTable } from "@/lib/realtime/use-room-channel";
-import { roomMode } from "@/lib/room-modes";
+import { roomModeFor } from "@/lib/room-modes";
 import { getSupabase } from "@/lib/supabase/client";
-import type { Activity, RoomDetail, RoomMember } from "@/lib/types";
+import type { Activity, RoomDetail, RoomLayer, RoomMember } from "@/lib/types";
 
 const TABLES: RoomTable[] = ["reading_progress", "room_members", "room_activity", "annotation_markers", "rooms"];
 
@@ -60,21 +61,24 @@ export function RoomLobby({ initial, initialExtras, welcome }: { initial: RoomDe
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [removing, setRemoving] = useState<RoomMember | null>(null);
   const [busy, setBusy] = useState(false);
+  const [layer, setLayer] = useState<RoomLayer | null>(null);
   const refreshing = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const mode = roomMode(room.mode);
+  const mode = roomModeFor(room);
   const isOwner = room.my_role === "owner";
   const isStaff = isOwner || room.my_role === "moderator";
   const archived = Boolean(room.archived_at);
   const unavailable = room.book.status !== "ready";
 
   const refresh = useCallback(async () => {
-    const [detail, activity, markers, unlocks] = await Promise.all([
+    const [detail, activity, markers, unlocks, layerResult] = await Promise.all([
       supabase.rpc("room_detail", { p_room_id: initial.id }),
       supabase.from("room_activity").select("id, room_id, actor_id, type, data, created_at").eq("room_id", initial.id).order("created_at", { ascending: false }).limit(30),
       supabase.from("annotation_markers").select("id, author_id, position, published_at").eq("room_id", initial.id),
       supabase.from("reading_unlocks").select("marker_id").eq("room_id", initial.id).eq("user_id", me.user_id),
+      supabase.rpc("room_layer", { p_room_id: initial.id }),
     ]);
+    if (layerResult.data) setLayer(layerResult.data as RoomLayer);
     if (detail.error) {
       // Removed, left, or the room is gone: there is nothing to show here any more.
       if (detail.error.message === "room_not_found") router.replace("/home");
@@ -107,6 +111,17 @@ export function RoomLobby({ initial, initialExtras, welcome }: { initial: RoomDe
   useEffect(() => () => {
     if (refreshing.current) clearTimeout(refreshing.current);
   }, []);
+
+  // The social layer (rituals, afterparties, features) is read once on arrival, then on every change.
+  useEffect(() => {
+    let cancelled = false;
+    void supabase.rpc("room_layer", { p_room_id: initial.id }).then(({ data }) => {
+      if (!cancelled && data) setLayer(data as RoomLayer);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [initial.id, supabase]);
 
   const { status, live } = useRoomChannel({
     roomId: room.id,
@@ -173,6 +188,12 @@ export function RoomLobby({ initial, initialExtras, welcome }: { initial: RoomDe
                 Invite
               </Button>
             )}
+            {(room.my?.furthest ?? 0) >= 0.98 && room.features?.vault !== false && (
+              <Link href={`/rooms/${room.id}/vault`} className={buttonClass("secondary", "lg")}>
+                <Stamp className="size-5" aria-hidden />
+                Vault
+              </Link>
+            )}
             <Link href={`/rooms/${room.id}/journey`} className={buttonClass("ghost", "lg")}>
               <ScrollText className="size-5" aria-hidden />
               Journey
@@ -237,6 +258,18 @@ export function RoomLobby({ initial, initialExtras, welcome }: { initial: RoomDe
           </ol>
         )}
       </Card>
+
+      <RoomMoments
+        roomId={room.id}
+        layer={layer}
+        meId={me.user_id}
+        isStaff={isStaff}
+        myFurthest={room.my?.furthest ?? 0}
+        finished={(room.my?.furthest ?? 0) >= 0.98}
+        personOf={(id) => { const p = people.get(id); return { id, display_name: p?.display_name ?? "A former member", avatar_path: p?.avatar_path ?? null }; }}
+        onChanged={() => void refresh()}
+        archived={archived}
+      />
 
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* ------------------------------------------------------------ members */}

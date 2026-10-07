@@ -2,18 +2,18 @@ import { BookPlus, Compass, Library, Plus, Users } from "lucide-react";
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ActivityList, type ActivityPerson } from "@/components/room/activity";
-import { ContinueReadingCard, OpenRoomCard, RoomCardView } from "@/components/room/room-card";
+import { OpenRoomCard, ReadingDesk, RoomCardView } from "@/components/room/room-card";
 import { BookCover } from "@/components/book-cover";
 import { ButtonLink, buttonClass } from "@/components/ui/button";
 import { Card, EmptyState, SectionHeading } from "@/components/ui/misc";
 import { requireAlpha } from "@/lib/supabase/guard";
 import { createSupabaseServer } from "@/lib/supabase/server";
-import type { Activity, HomeData, RoomPreview } from "@/lib/types";
+import type { Activity, AwaySummary, HomeData, RoomLayer, RoomPreview } from "@/lib/types";
 
 export const metadata: Metadata = { title: "Home" };
 
 // Activity worth surfacing on Home: what friends did, never page turns.
-const HOME_ACTIVITY = ["joined", "started_reading", "chapter_completed", "milestone", "finished", "passed", "note_left", "replied"];
+const HOME_ACTIVITY = ["joined", "started_reading", "chapter_completed", "milestone", "finished", "passed", "note_left", "replied", "prediction_sealed", "poll_added", "ritual_started", "afterparty"];
 
 export default async function HomePage() {
   const me = await requireAlpha();
@@ -35,6 +35,18 @@ export default async function HomePage() {
   const openRooms = ((openData ?? []) as RoomPreview[]).filter((room) => !room.is_member).slice(0, 3);
   const readyBooks = home.books.filter((book) => book.status === "ready");
 
+  // The desk's book: what happened while you were away, and its chapters to tell it with.
+  let away: AwaySummary | null = null;
+  let outline: RoomLayer["outline"] = null;
+  if (current) {
+    const [awayResult, layerResult] = await Promise.all([
+      supabase.rpc("room_away", { p_room_id: current.id }),
+      supabase.rpc("room_layer", { p_room_id: current.id }),
+    ]);
+    away = (awayResult.data as AwaySummary | null) ?? null;
+    outline = (layerResult.data as RoomLayer | null)?.outline ?? null;
+  }
+
   // Recent activity across the tester's active rooms (other people's, not their own).
   let activity: Activity[] = [];
   if (active.length > 0) {
@@ -43,7 +55,7 @@ export default async function HomePage() {
       .select("id, room_id, actor_id, type, data, created_at")
       .in("room_id", active.slice(0, 12).map((room) => room.id))
       .in("type", HOME_ACTIVITY)
-      .neq("actor_id", me.user_id)
+      .or(`actor_id.is.null,actor_id.neq.${me.user_id}`)
       .order("created_at", { ascending: false })
       .limit(8);
     activity = (data ?? []) as Activity[];
@@ -102,7 +114,7 @@ export default async function HomePage() {
   return (
     <div className="space-y-12">
       {current ? (
-        <ContinueReadingCard room={current} />
+        <ReadingDesk room={current} away={away} outline={outline} />
       ) : (
         <EmptyState icon={<Users className="size-5" aria-hidden />} title="No active rooms right now" action={<ButtonLink href="/books">Start a new room</ButtonLink>}>
           Your finished rooms are kept below as journeys.

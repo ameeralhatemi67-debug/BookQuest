@@ -1,10 +1,10 @@
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
-import { AlphaCodeForm, SignOutButton } from "@/components/auth/forms";
+import { ClaimSeatButton, SignOutButton } from "@/components/auth/forms";
 import { FormError } from "@/components/ui/field";
-import { getAccess } from "@/lib/supabase/server";
+import { createSupabaseServer, getAccess } from "@/lib/supabase/server";
 
-export const metadata: Metadata = { title: "Alpha access" };
+export const metadata: Metadata = { title: "Waiting for a seat" };
 
 export default async function AlphaPage({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   const params = await searchParams;
@@ -13,9 +13,18 @@ export default async function AlphaPage({ searchParams }: { searchParams: Promis
   if (!access) redirect("/login");
   if (access.status === "active") redirect(next ?? "/home");
 
+  // A seat may have opened since this reader signed up: take it straight away.
+  let seats: { used: number; capacity: number } | null = null;
+  if (access.status === "pending") {
+    const supabase = await createSupabaseServer();
+    const { data } = await supabase.rpc("claim_alpha_seat");
+    if ((data as { status?: string } | null)?.status === "active") redirect(next ?? "/home");
+    seats = data as { used: number; capacity: number } | null;
+  }
+
   return (
     <>
-      <h1 className="mb-1 text-3xl text-ink">One more step, {access.display_name.split(" ")[0]}</h1>
+      <h1 className="mb-1 text-3xl text-ink">{access.status === "disabled" ? "Access is switched off" : "The alpha is full for now"}</h1>
       {access.status === "disabled" ? (
         <div className="mt-4">
           <FormError>
@@ -25,9 +34,10 @@ export default async function AlphaPage({ searchParams }: { searchParams: Promis
       ) : (
         <>
           <p className="mb-6 text-sm leading-relaxed text-ink-soft">
-            This is a closed alpha. Enter the code from your invitation to come in — it only needs doing once.
+            {seats ? `All ${seats.capacity} seats are taken, ${access.display_name.split(" ")[0]}. ` : ""}
+            Your account is saved. You&apos;ll get in as soon as a seat opens, or when the person running the alpha lets you in.
           </p>
-          <AlphaCodeForm next={next} />
+          <ClaimSeatButton next={next} />
         </>
       )}
       <div className="mt-6 text-center">

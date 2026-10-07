@@ -11,7 +11,9 @@ import { Menu, MenuContent, MenuItem, MenuTrigger, Popover, PopoverArrow, Popove
 import { cn, isEmojiOnly, plural, timeAgo } from "@/lib/format";
 import { getSupabase } from "@/lib/supabase/client";
 import type { Marker } from "@/lib/types";
+import { attentionName, NoteActor } from "./attention";
 import { AttachmentView } from "./media";
+import { GiftBox, PackageReveal } from "./package";
 import type { ViewerMarker } from "./types";
 import type { Annotations, NoteBundle } from "./use-annotations";
 
@@ -32,8 +34,9 @@ function hostOf(url: string): string {
 // ---------------------------------------------------------------- margin marker
 /**
  * The mark a note leaves in the margin.
- *   locked → a quiet outlined dot with a lock: "Sara left something here" and nothing more.
- *   open   → the author's avatar; a gold ring while it is new to you.
+ *   locked  → a quiet outlined dot with a lock: "Sara left something here" and nothing more.
+ *   package → for its recipient, a wrapped box in the friend's colour.
+ *   open    → the author's avatar, performing the attention they chose.
  * At least 44px of touch target either way.
  */
 export function MarkerButton({
@@ -43,6 +46,7 @@ export function MarkerButton({
   onPreview,
   bundle,
   viewerId,
+  animated = true,
 }: {
   marker: ViewerMarker;
   author: AvatarPerson;
@@ -50,11 +54,32 @@ export function MarkerButton({
   onPreview: () => void;
   bundle?: NoteBundle;
   viewerId: string;
+  /** The room's "animated notes" switch. */
+  animated?: boolean;
 }) {
   const hue = personHue(marker.authorId);
   const first = author.display_name.split(" ")[0];
 
   if (!marker.open) {
+    if (marker.kind === "package") {
+      return (
+        <Popover>
+          <PopoverTrigger className="group flex size-11 items-center justify-center rounded-full" aria-label={`${marker.title || `A package from ${first}`}. It opens when you reach it.`}>
+            <GiftBox hue={hue} size={26} wiggle className="transition-transform group-hover:scale-110" />
+          </PopoverTrigger>
+          <PopoverContent side="left" className="w-64 p-3.5">
+            <div className="flex items-center gap-2.5">
+              <GiftBox hue={hue} size={30} />
+              <div className="min-w-0">
+                <p className="truncate text-sm font-medium text-ink">{marker.title || `For you, from ${first}`}</p>
+                <p className="text-xs text-ink-soft">Wrapped by {first}</p>
+              </div>
+            </div>
+            <p className="mt-2 text-sm leading-relaxed text-ink-soft">It stays sealed until you&apos;ve read up to this spot.</p>
+          </PopoverContent>
+        </Popover>
+      );
+    }
     return (
       <Popover>
         <PopoverTrigger className="group flex size-11 items-center justify-center rounded-full" aria-label={`${author.display_name} left something here. It opens when you reach it.`}>
@@ -76,11 +101,11 @@ export function MarkerButton({
     );
   }
 
-  return <OpenMarker marker={marker} author={author} onOpen={onOpen} onPreview={onPreview} bundle={bundle} viewerId={viewerId} />;
+  return <OpenMarker marker={marker} author={author} onOpen={onOpen} onPreview={onPreview} bundle={bundle} viewerId={viewerId} animated={animated} />;
 }
 
-function OpenMarker({ marker, author, onOpen, onPreview, bundle, viewerId }: {
-  marker: ViewerMarker; author: AvatarPerson; onOpen: () => void; onPreview: () => void; bundle?: NoteBundle; viewerId: string;
+function OpenMarker({ marker, author, onOpen, onPreview, bundle, viewerId, animated }: {
+  marker: ViewerMarker; author: AvatarPerson; onOpen: () => void; onPreview: () => void; bundle?: NoteBundle; viewerId: string; animated: boolean;
 }) {
   const key = `marginalia:note-rest:${viewerId}:${marker.id}`;
   const [sleepUntil, setSleepUntil] = useState(() => {
@@ -95,6 +120,10 @@ function OpenMarker({ marker, author, onOpen, onPreview, bundle, viewerId }: {
   const suppressClick = useRef(false);
   const sleeping = sleepUntil > 0;
   const isNew = marker.fresh || !marker.seen;
+  const isPackage = marker.kind === "package";
+  // Your own notes sit still: the performance is for the friend who finds it.
+  const mine = marker.authorId === viewerId;
+  const still = sleeping || dragging || bubble || !animated || mine || !isNew;
   useEffect(() => {
     if (!sleeping) return;
     const timer = setTimeout(() => setSleepUntil(0), Math.max(1, sleepUntil - Date.now()));
@@ -106,14 +135,19 @@ function OpenMarker({ marker, author, onOpen, onPreview, bundle, viewerId }: {
     setSleepUntil(until);
     try { localStorage.setItem(key, String(until)); } catch { /* optional device preference */ }
   };
-  const showPreview = () => { setBubble(true); onPreview(); };
+  const showPreview = () => {
+    // A package is unwrapped in its own panel, not peeked at in a bubble.
+    if (isPackage) return onOpen();
+    setBubble(true);
+    onPreview();
+  };
   return (
     <Popover open={bubble} onOpenChange={setBubble}>
     <PopoverTrigger asChild>
     <button
       type="button"
       data-note-avatar={marker.id}
-      data-attention={sleeping || dragging || bubble ? "quiet" : marker.attention ?? "gentle"}
+      data-attention={still ? "still" : marker.attention ?? "gentle"}
       data-sleeping={sleeping}
       style={{ transform: `translate(${offset.x}px, ${offset.y}px)`, touchAction: "none" }}
       onPointerDown={event => {
@@ -175,18 +209,17 @@ function OpenMarker({ marker, author, onOpen, onPreview, bundle, viewerId }: {
           lastClick.current = now; clickTimer.current = setTimeout(showPreview, 330);
         }
       }}
-      className="note-avatar group flex size-11 cursor-grab items-center justify-center rounded-full active:cursor-grabbing"
-      aria-label={`${isNew ? "New: " : ""}Open what ${author.display_name} left here`}
+      className="note-avatar group relative flex size-11 cursor-grab items-center justify-center rounded-full active:cursor-grabbing"
+      aria-label={`${isNew ? "New: " : ""}${isPackage ? `Open the package ${author.display_name} wrapped for you` : `Open what ${author.display_name} left here`}${!still ? `, ${attentionName(marker.attention)}` : ""}`}
       aria-describedby={`note-help-${marker.id}`}
     >
-      <span className="note-avatar-face relative rounded-full">
-        <Avatar person={author} size={32} className={cn("rounded-full shadow-soft", isNew && "outline outline-2 outline-offset-1 outline-gold")} />
-        {isNew && <span className="absolute -right-0.5 -top-0.5 size-2.5 rounded-full bg-gold ring-2 ring-[var(--page)]" aria-hidden />}
-        {sleeping && <span className="absolute -right-1 -top-2 text-[10px] font-semibold text-ink-faint" aria-hidden>zZ</span>}
-      </span>
+      <NoteActor person={author} attention={marker.attention ?? "gentle"} still={still} arriving={marker.fresh && !sleeping} />
+      {isNew && !isPackage && <span className="absolute right-1 top-1 size-2.5 rounded-full bg-gold ring-2 ring-[var(--page)]" aria-hidden />}
+      {isPackage && <GiftBox hue={personHue(marker.authorId)} size={16} className="!absolute -right-0.5 bottom-0" />}
+      {sleeping && <span className="absolute right-0 top-0 text-[10px] font-semibold text-ink-faint" aria-hidden>zZ</span>}
     </button>
     </PopoverTrigger>
-    <span className="sr-only" id={`note-help-${marker.id}`}>Tap to read. Double tap to reply. Drag within this page; wiggle to snooze for five minutes.</span>
+    <span className="sr-only" id={`note-help-${marker.id}`}>{isPackage ? "Tap to unwrap." : "Tap to read. Double tap to reply."} Drag within this page; wiggle to snooze for five minutes.</span>
     <PopoverContent side="left" sideOffset={10} className="note-speech w-[min(320px,calc(100vw-24px))] rounded-[24px] p-4" aria-label={`Note from ${author.display_name}`} onOpenAutoFocus={e => e.preventDefault()}>
       <PopoverArrow width={18} height={10} className="fill-raised" />
       <div className="mb-3 flex items-center gap-2"><Avatar person={author} size={24} /><span className="text-sm font-medium text-ink">{author.display_name}</span><button className="ml-auto flex size-8 items-center justify-center rounded-full hover:bg-sunk" aria-label="Close note preview" onClick={() => setBubble(false)}><X className="size-4" /></button></div>
@@ -268,6 +301,7 @@ export function NoteThread({
   archived,
   onJump,
   onRemoved,
+  unwrap = false,
 }: {
   marker: Marker;
   bundle: NoteBundle | undefined;
@@ -278,6 +312,8 @@ export function NoteThread({
   archived: boolean;
   onJump?: () => void;
   onRemoved: () => void;
+  /** A package opened for the first time: play the unwrapping before the contents. */
+  unwrap?: boolean;
 }) {
   const author = people.get(marker.author_id) ?? unknownPerson(marker.author_id);
   const [reply, setReply] = useState("");
@@ -325,7 +361,7 @@ export function NoteThread({
         <div className="min-w-0 flex-1">
           <p className="truncate text-sm font-medium text-ink">{marker.author_id === meId ? "You" : author.display_name}</p>
           <p className="truncate text-xs text-ink-faint">
-            left this {timeAgo(marker.published_at ?? marker.created_at)}
+            {marker.kind === "package" ? "wrapped this" : "left this"} {timeAgo(marker.published_at ?? marker.created_at)}
             {marker.location_label ? ` · ${marker.location_label}` : ""}
           </p>
         </div>
@@ -357,7 +393,7 @@ export function NoteThread({
             This note isn&apos;t available. It may have been removed — or you haven&apos;t reached it yet.
           </p>
         ) : (
-          <>
+          <PackageReveal author={author} title={marker.package_title} opened={!(marker.kind === "package" && unwrap)} onOpen={() => {}}>
             {content.quote && (
               <button
                 type="button"
@@ -436,7 +472,7 @@ export function NoteThread({
               </ol>
             )}
             <div ref={end} />
-          </>
+          </PackageReveal>
         )}
       </div>
 

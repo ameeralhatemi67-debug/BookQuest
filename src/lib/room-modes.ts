@@ -69,4 +69,14 @@ export const VISIBILITY_INFO: Record<RoomVisibility, { name: string; description
 };
 
 /** Default cap for any room in this alpha (mirrors private.room_capacity in SQL). */
-export const MAX_ROOM_SIZE = 50;
+export const MAX_ROOM_SIZE = 75;
+
+/**
+ * The mode as this room experiences it: a Race room with the "race" feature
+ * switched off keeps its percentages but drops standings and overtakes.
+ */
+export function roomModeFor(room: { mode: string; features?: import("@/lib/types").RoomFeatures | null }): RoomMode {
+  const mode = roomMode(room.mode);
+  if (mode.id !== "race" || room.features?.race !== false) return mode;
+  return { ...mode, progress: { ...mode.progress, emphasis: "subtle", showStandings: false, showPassing: false } };
+}

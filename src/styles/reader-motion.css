@@ -1,0 +1,173 @@
+/* ==========================================================================
+   Reader motion: page turns and the social layer's moments.
+   ========================================================================== */
+
+/* ---------------------------------------------------------------- Page flip
+   A turn is a View Transition. The browser snapshots the page as it was, the
+   reader moves underneath, and these rules animate the two snapshots:
+
+     leaf-right  single pages, and the right page of a spread
+     leaf-left   the left page of a spread
+
+   Forward: the old right leaf lifts on the spine and swings away while the
+   next left page (the back of the same sheet) lands, so in a spread it reads
+   as one continuous leaf. Backward is the mirror. Both halves share one curve
+   so they meet edge-on at the spine at exactly the same instant. */
+html[data-flip] { --flip-dur: 680ms; --flip-ease: cubic-bezier(.32, .08, .24, 1); }
+html[data-flip]::view-transition-group(root) { animation: none; }
+html[data-flip]::view-transition-old(root) { display: none; }
+html[data-flip]::view-transition-new(root) { animation: none; }
+html[data-flip]::view-transition-group(leaf-right),
+html[data-flip]::view-transition-group(leaf-left) { animation-duration: var(--flip-dur); z-index: 2; }
+html[data-flip]::view-transition-image-pair(leaf-right),
+html[data-flip]::view-transition-image-pair(leaf-left) { perspective: 2400px; isolation: isolate; }
+html[data-flip]::view-transition-old(leaf-right),
+html[data-flip]::view-transition-new(leaf-right),
+html[data-flip]::view-transition-old(leaf-left),
+html[data-flip]::view-transition-new(leaf-left) {
+  animation-duration: var(--flip-dur);
+  animation-fill-mode: both;
+  mix-blend-mode: normal;
+  backface-visibility: hidden;
+}
+
+/* forward */
+html[data-flip="next"]::view-transition-old(leaf-right) { transform-origin: 0% 50%; z-index: 2; animation-name: leaf-lift-away; animation-timing-function: var(--flip-ease); }
+html[data-flip="next"]::view-transition-new(leaf-right) { z-index: 1; animation-name: leaf-revealed; animation-timing-function: ease-out; }
+html[data-flip="next"]::view-transition-new(leaf-left) { transform-origin: 100% 50%; z-index: 2; animation-name: leaf-land-left; animation-timing-function: var(--flip-ease); }
+html[data-flip="next"]::view-transition-old(leaf-left) { z-index: 1; animation-name: leaf-covered; animation-timing-function: ease-in; }
+
+/* backward */
+html[data-flip="prev"]::view-transition-new(leaf-right) { transform-origin: 0% 50%; z-index: 2; animation-name: leaf-land-right; animation-timing-function: var(--flip-ease); }
+html[data-flip="prev"]::view-transition-old(leaf-right) { z-index: 1; animation-name: leaf-covered; animation-timing-function: ease-in; }
+html[data-flip="prev"]::view-transition-old(leaf-left) { transform-origin: 100% 50%; z-index: 2; animation-name: leaf-lift-right; animation-timing-function: var(--flip-ease); }
+html[data-flip="prev"]::view-transition-new(leaf-left) { z-index: 1; animation-name: leaf-revealed; animation-timing-function: ease-out; }
+
+/* The lifting edge rises toward the reader (rotateY negative on a left
+   hinge), with a whisper of skew while the sheet is still bent, and the face
+   darkens as it turns away from the light. */
+@keyframes leaf-lift-away {
+  0% { transform: rotateY(0) skewY(0); filter: brightness(1) drop-shadow(0 0 0 rgb(0 0 0 / 0)); }
+  18% { transform: rotateY(-24deg) skewY(-1.2deg); filter: brightness(.98) drop-shadow(-10px 4px 16px rgb(0 0 0 / .18)); }
+  50% { transform: rotateY(-90deg) skewY(-.6deg); filter: brightness(.72) drop-shadow(-18px 6px 22px rgb(0 0 0 / .24)); }
+  100% { transform: rotateY(-180deg) skewY(0); filter: brightness(.6) drop-shadow(0 0 0 rgb(0 0 0 / 0)); }
+}
+@keyframes leaf-land-left {
+  0% { transform: rotateY(180deg) skewY(0); filter: brightness(.6); }
+  50% { transform: rotateY(90deg) skewY(.6deg); filter: brightness(.72) drop-shadow(18px 6px 22px rgb(0 0 0 / .22)); }
+  84% { transform: rotateY(10deg) skewY(.4deg); filter: brightness(.96) drop-shadow(6px 3px 10px rgb(0 0 0 / .12)); }
+  100% { transform: rotateY(0) skewY(0); filter: brightness(1) drop-shadow(0 0 0 rgb(0 0 0 / 0)); }
+}
+@keyframes leaf-land-right {
+  0% { transform: rotateY(-180deg) skewY(0); filter: brightness(.6); }
+  50% { transform: rotateY(-90deg) skewY(-.6deg); filter: brightness(.72) drop-shadow(-18px 6px 22px rgb(0 0 0 / .22)); }
+  84% { transform: rotateY(-10deg) skewY(-.4deg); filter: brightness(.96) drop-shadow(-6px 3px 10px rgb(0 0 0 / .12)); }
+  100% { transform: rotateY(0) skewY(0); filter: brightness(1) drop-shadow(0 0 0 rgb(0 0 0 / 0)); }
+}
+@keyframes leaf-lift-right {
+  0% { transform: rotateY(0) skewY(0); filter: brightness(1); }
+  18% { transform: rotateY(24deg) skewY(1.2deg); filter: brightness(.98) drop-shadow(10px 4px 16px rgb(0 0 0 / .18)); }
+  50% { transform: rotateY(90deg) skewY(.6deg); filter: brightness(.72) drop-shadow(18px 6px 22px rgb(0 0 0 / .24)); }
+  100% { transform: rotateY(180deg) skewY(0); filter: brightness(.6); }
+}
+/* What lies beneath starts in the turning sheet's shadow and comes into the light. */
+@keyframes leaf-revealed { 0% { filter: brightness(.84); } 55% { filter: brightness(.94); } 100% { filter: brightness(1); } }
+@keyframes leaf-covered { 0% { filter: brightness(1); } 100% { filter: brightness(.86); } }
+
+/* Margin avatars ride the old sheet away; the new page's avatars land after the turn. */
+
+/* ---------------------------------------------------------------- Wax seal (sealing a prediction) */
+.wax-seal {
+  --seal: oklch(0.52 0.16 28);
+  position: relative; display: inline-grid; place-items: center;
+  width: 56px; height: 56px; border-radius: 50%;
+  background: radial-gradient(circle at 34% 30%, color-mix(in oklab, var(--seal) 70%, white) 0, var(--seal) 46%, color-mix(in oklab, var(--seal) 75%, black) 100%);
+  color: color-mix(in oklab, var(--seal) 35%, white);
+  box-shadow: inset 0 -3px 6px rgb(0 0 0 / .28), inset 0 2px 4px rgb(255 255 255 / .22), 0 3px 8px rgb(var(--shadow-color) / .28);
+}
+.wax-seal::before {
+  content: ""; position: absolute; inset: -5px; z-index: -1; border-radius: 46% 54% 50% 50% / 52% 46% 54% 48%;
+  background: var(--seal); filter: brightness(.86);
+}
+.wax-seal[data-size="sm"] { width: 28px; height: 28px; }
+.wax-seal[data-size="sm"]::before { inset: -3px; }
+.wax-seal-stamp { animation: wax-stamp 700ms cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes wax-stamp {
+  0% { transform: translateY(-46px) scale(1.4) rotate(-14deg); opacity: 0; }
+  45% { transform: translateY(0) scale(1.4) rotate(-4deg); opacity: 1; }
+  58% { transform: translateY(0) scale(.86, .8) rotate(0); }
+  74% { transform: scale(1.06, 1.04); }
+  100% { transform: scale(1); }
+}
+.wax-seal-break { animation: wax-break 620ms cubic-bezier(.5, 0, .2, 1) both; }
+@keyframes wax-break {
+  0% { transform: scale(1) rotate(0); }
+  20% { transform: scale(1.08) rotate(-6deg); }
+  40% { transform: scale(1.08) rotate(5deg); }
+  100% { transform: scale(.3) rotate(40deg); opacity: 0; filter: blur(2px); }
+}
+.prediction-reveal { animation: prediction-reveal 640ms cubic-bezier(.16, 1, .3, 1) both; }
+@keyframes prediction-reveal {
+  0% { transform: perspective(1200px) rotateX(-38deg) translateY(8px); opacity: 0; transform-origin: 50% 0; }
+  100% { transform: perspective(900px) rotateX(0) translateY(0); opacity: 1; transform-origin: 50% 0; }
+}
+
+/* ---------------------------------------------------------------- Package (unwrapping) */
+.package-lid { transform-origin: 50% 100%; }
+.package-open .package-lid { animation: package-lid 760ms cubic-bezier(.3, 0, .2, 1) both; }
+.package-open .package-ribbon { animation: package-ribbon 420ms ease-in both; }
+.package-open .package-body { animation: package-body 760ms cubic-bezier(.3, 0, .2, 1) both; }
+@keyframes package-lid { 0% { transform: translateY(0) rotate(0); } 30% { transform: translateY(-4px) rotate(-4deg); } 100% { transform: translateY(-46px) rotate(-26deg); opacity: 0; } }
+@keyframes package-ribbon { 0% { transform: scaleX(1); } 100% { transform: scaleX(0); opacity: 0; } }
+@keyframes package-body { 0% { transform: scale(1); } 22% { transform: scale(1.08, .92); } 44% { transform: scale(.96, 1.05); } 100% { transform: scale(.7); opacity: 0; } }
+.package-contents > * { animation: rm-fade-up .5s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--i, 0) * 70ms + 420ms); }
+.package-ahead { animation: package-wiggle 5s ease-in-out infinite; transform-origin: 50% 90%; }
+@keyframes package-wiggle { 0%, 82%, 100% { transform: rotate(0); } 86% { transform: rotate(-9deg); } 90% { transform: rotate(7deg); } 94% { transform: rotate(-3deg); } }
+
+/* ---------------------------------------------------------------- Polls */
+.poll-bar { transform-origin: 0 50%; animation: poll-grow 820ms cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--i, 0) * 80ms); }
+@keyframes poll-grow { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+
+/* ---------------------------------------------------------------- Reaction weather */
+.weather-chip { animation: weather-in 520ms cubic-bezier(.16, 1, .3, 1) both; }
+.weather-chip[data-leaving="true"] { animation: weather-out 380ms ease-in both; }
+.weather-chip > span { animation: weather-pop 480ms cubic-bezier(.2, 1.4, .4, 1) both; animation-delay: calc(var(--i, 0) * 90ms + 140ms); }
+@keyframes weather-in { from { opacity: 0; transform: translateX(14px); filter: blur(3px); } to { opacity: 1; transform: none; filter: none; } }
+@keyframes weather-out { to { opacity: 0; transform: translateX(10px); filter: blur(2px); } }
+@keyframes weather-pop { from { transform: scale(.3); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* ---------------------------------------------------------------- Live reading: knocks and ghosts */
+.knock-ripple { position: absolute; inset: -6px; border-radius: 50%; border: 2px solid var(--moss); opacity: 0; pointer-events: none; animation: knock-ripple 1.1s cubic-bezier(.1, .7, .3, 1) both; }
+.knock-ripple:nth-child(2) { animation-delay: .18s; }
+@keyframes knock-ripple { 0% { opacity: .9; transform: scale(.7); } 100% { opacity: 0; transform: scale(1.9); } }
+.knock-shake { animation: knock-shake 560ms cubic-bezier(.36, .07, .19, .97) both; }
+@keyframes knock-shake { 10%, 90% { transform: translateX(-1px) rotate(-3deg); } 20%, 80% { transform: translateX(2px) rotate(5deg); } 30%, 50%, 70% { transform: translateX(-3px) rotate(-7deg); } 40%, 60% { transform: translateX(3px) rotate(7deg); } }
+.live-ghost { transition: top 1.2s cubic-bezier(.16, 1, .3, 1), left 1.2s cubic-bezier(.16, 1, .3, 1); }
+.live-glow { animation: live-glow 2.4s ease-in-out infinite; }
+@keyframes live-glow { 0%, 100% { box-shadow: 0 0 0 0 color-mix(in oklab, var(--moss) 45%, transparent); } 50% { box-shadow: 0 0 0 6px color-mix(in oklab, var(--moss) 0%, transparent); } }
+
+/* ---------------------------------------------------------------- Book map: the glow of things ahead */
+.map-glow { animation: map-glow 3.2s ease-in-out infinite; }
+@keyframes map-glow { 0%, 100% { opacity: .55; } 50% { opacity: 1; } }
+
+/* ---------------------------------------------------------------- Vault */
+.vault-door { animation: vault-door 1.1s cubic-bezier(.7, 0, .2, 1) both; transform-origin: 0 50%; }
+@keyframes vault-door { 0% { transform: perspective(1200px) rotateY(0); } 100% { transform: perspective(1200px) rotateY(-108deg); opacity: 0; } }
+.vault-rise > * { animation: rm-fade-up .6s cubic-bezier(.16, 1, .3, 1) both; animation-delay: calc(var(--i, 0) * 90ms + 300ms); }
+
+@media (prefers-reduced-motion: reduce) {
+  .package-ahead, .map-glow, .live-glow { animation: none; }
+}
+
+@keyframes rm-fade-up { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+/* ---------------------------------------------------------------- Gift box (packages) */
+.gift { position: relative; display: inline-block; flex-shrink: 0; --gift-paper: oklch(0.74 0.1 var(--gift-hue)); --gift-dark: oklch(0.6 0.12 var(--gift-hue)); --gift-ribbon: var(--gold); }
+.gift-body { position: absolute; left: 10%; right: 10%; top: 38%; bottom: 0; border-radius: 8% 8% 12% 12%; background: linear-gradient(180deg, var(--gift-dark) 0 10%, var(--gift-paper) 10% 100%); box-shadow: inset 0 -8% 0 rgb(0 0 0 / .06); }
+.gift-lid { position: absolute; left: 3%; right: 3%; top: 22%; height: 20%; border-radius: 10%; background: var(--gift-paper); box-shadow: 0 1px 0 rgb(0 0 0 / .08), inset 0 1px 0 rgb(255 255 255 / .35); }
+.gift-ribbon { position: absolute; left: 50%; top: 0; bottom: 0; width: 16%; translate: -50% 0; background: var(--gift-ribbon); }
+.gift-lid .gift-ribbon { width: 17%; }
+.gift-bow { position: absolute; left: 50%; bottom: 92%; width: 64%; height: 70%; translate: -50% 0; }
+.gift-bow::before, .gift-bow::after { content: ""; position: absolute; bottom: 0; width: 46%; height: 100%; border: max(1.5px, calc(var(--gift-size, 26px) * 0.07)) solid var(--gift-ribbon); border-radius: 50% 50% 10% 50%; }
+.gift-bow::before { left: 4%; transform: rotate(-28deg); transform-origin: 100% 100%; }
+.gift-bow::after { right: 4%; border-radius: 50% 50% 50% 10%; transform: rotate(28deg); transform-origin: 0 100%; }

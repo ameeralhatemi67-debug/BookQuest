@@ -23,6 +23,8 @@ export interface ReadingContext {
   bookId?: string;
   label?: string;
   progress?: number;
+  /** Which room experiments were switched off when this feedback was written. */
+  featuresOff?: string[];
 }
 
 interface FeedbackContextValue {

@@ -225,6 +225,15 @@ export function createRealtime(db: EmuDb, log: (message: string) => void) {
         return;
       }
 
+      if (event === "broadcast") {
+        // Private channels already passed the realtime.messages policy at join.
+        // Like Supabase's default (self: false), the sender does not get it back.
+        for (const sub of subscriptions) {
+          if (sub.topic === topic && sub !== current) send(sub.socket, [sub.joinRef, null, topic, "broadcast", payload]);
+        }
+        return reply("ok");
+      }
+
       if (event === "presence") {
         const inner = payload as { event?: string; payload?: Record<string, unknown> };
         if (inner.event === "track") {

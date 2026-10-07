@@ -4,6 +4,7 @@ import { Archive, DoorClosed, DoorOpen, LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
+import { FeatureToggles } from "@/components/room/feature-toggles";
 import { parseMemberLimit, RoomSettingsFields, type RoomSettings } from "@/components/room/room-form";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
@@ -89,6 +90,14 @@ function SettingsBody({ room, onClose, onChanged }: { room: RoomDetail; onClose:
                 </Button>
               </div>
             </form>
+          )}
+
+          {isStaff && !archived && (
+            <section aria-labelledby="room-features-heading" className="border-t border-line pt-6">
+              <h3 id="room-features-heading" className="font-display text-lg text-ink">What this room tests</h3>
+              <p className="mb-4 text-sm text-ink-soft">Switch features off to learn what your group actually enjoys. Changes apply to everyone in the room straight away.</p>
+              <FeatureToggles roomId={room.id} features={room.features} onSaved={onChanged} compact />
+            </section>
           )}
 
           <div className="space-y-3 border-t border-line pt-6">

@@ -1,12 +1,13 @@
 @import "tailwindcss";
+@import "../styles/attention.css";
+@import "../styles/reader-motion.css";
 
-/* A note moves inside its touch target, so it is always easy to catch. */
-.note-avatar-face { transform-origin: 50% 70%; transition: transform 180ms ease; }
-.note-avatar[data-attention="gentle"] .note-avatar-face { animation: note-hop 7s ease-in-out infinite; }
-.note-avatar[data-attention="playful"] .note-avatar-face { animation: note-play 6s ease-in-out infinite; }
-.note-avatar:hover .note-avatar-face, .note-avatar:active .note-avatar-face, .note-avatar:focus-visible .note-avatar-face { animation-play-state: paused; }
-@keyframes note-hop { 0%, 72%, 100% { transform: translateY(0); } 78%, 87% { transform: translateY(-8px) rotate(-7deg); } 83%, 92% { transform: translateY(0) rotate(6deg); } }
-@keyframes note-play { 0%, 58%, 100% { transform: translateY(0) rotate(0); } 64% { transform: translateY(-13px) rotate(-14deg); } 72% { transform: translateY(0) rotate(14deg); } 82% { transform: translateY(-9px) rotate(360deg); } 91% { transform: translateY(0) rotate(360deg); } }
+/* A note performs inside its touch target, so it is always easy to catch. When a
+   pointer or keyboard focus finds it, the performance stops and the avatar perks up. */
+.note-avatar:is(:hover, :focus-visible, :active) .na :is(.na-jump, .na-spin, .na-body, .na-shadow, .na-ghost, .na-aura, .na-fx i) { animation: none; }
+.note-avatar .na-body { transition: transform 220ms cubic-bezier(.16, 1, .3, 1); }
+.note-avatar:is(:hover, :focus-visible) .na-body { transform: translateY(-2px) scale(1.08); }
+.note-avatar:active .na-body { transform: scale(1.12, .9); transition-duration: 90ms; }
 .note-pin { position: absolute; z-index: 3; width: 9px; height: 9px; border: 2px solid var(--page); border-radius: 50% 50% 50% 0; transform: translate(-50%, -50%) rotate(-45deg); background: var(--accent); box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 30%, transparent); pointer-events: none; }
 .note-pin-draft { animation: breathe 2s ease-in-out infinite; }
 @media (hover: hover) and (pointer: fine) {
@@ -20,7 +21,7 @@
   .progress-avatar-drop:hover .progress-avatar-figure::after { width: 10px; opacity: .55; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .note-avatar-face, .note-pin-draft { animation: none !important; }
+  .note-pin-draft { animation: none !important; }
   .progress-avatar-drop, .progress-avatar-figure, .progress-avatar-figure::before, .progress-avatar-figure::after { transition-duration: 0.01ms !important; }
 }
 
@@ -408,3 +409,13 @@ button:not(:disabled), a { touch-action: manipulation; }
 .reader-root[data-focus="true"] .reader-turn { display: none; }
 .reader-root[data-focus="true"] .soundtrack-dock { left: 12px; }
 @media (prefers-reduced-motion: reduce) { .sound-wave i { animation: none; } }
+/* Weather, live friends and the current ritual share the top-right corner, under the header. */
+.reader-corner { top: calc(var(--reader-header-height) + env(safe-area-inset-top) + 12px); right: 12px; max-width: calc(100vw - var(--reader-rail-width) - 24px); }
+.reader-root[data-focus="true"] .reader-corner { top: calc(env(safe-area-inset-top) + 12px); }
+@media (min-width: 768px) { .reader-corner { right: 28px; } }
+
+/* Home's reading desk: a lit surface the current book rests on. */
+.reading-desk { background: radial-gradient(120% 100% at 18% 0%, var(--raised) 0%, color-mix(in oklab, var(--sunk) 70%, var(--paper)) 70%, var(--sunk) 100%); }
+.reading-desk::before { content: ""; position: absolute; inset: auto -10% -40% -10%; height: 70%; background: radial-gradient(50% 50% at 30% 50%, color-mix(in oklab, var(--accent) 9%, transparent), transparent 70%); pointer-events: none; }
+.desk-book::after { content: ""; position: absolute; left: 8%; right: -6%; bottom: -14px; height: 22px; border-radius: 50%; background: rgb(var(--shadow-color) / .22); filter: blur(10px); z-index: -1; }
+.desk-book-pages { position: absolute; inset: 6px -7px 4px 12px; border-radius: 3px 6px 6px 3px; transform: rotate(-1.5deg); background: repeating-linear-gradient(180deg, var(--raised) 0 2px, var(--line) 2px 3px); box-shadow: 0 2px 6px rgb(var(--shadow-color) / .12); }

@@ -1,24 +1,47 @@
 "use client";
 
-import { FileAudio, Film, ImagePlus, Link2, Mic, Pencil, X } from "lucide-react";
+import { FileAudio, Film, ImagePlus, Link2, Mic, Music2, Pencil, X } from "lucide-react";
 import { useRef, useState, type FormEvent } from "react";
 import { SketchPad } from "./sketch-pad";
+import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { FormError, Input, Textarea } from "@/components/ui/field";
-import { SheetClose } from "@/components/ui/overlay";
+import { useMe } from "@/components/app/providers";
+import { featureOn } from "@/lib/features";
 import { cn, formatBytes } from "@/lib/format";
 import { ATTACHMENT_ACCEPT, validateAttachment, type AttachmentKind } from "@/lib/limits";
 import { canRecordVoice, VoiceRecorder } from "./media";
-import type { NoteAttention, RoomMember } from "@/lib/types";
+import type { NoteAttention, RoomFeatures, RoomMember } from "@/lib/types";
+import { AttentionPicker } from "./attention";
 import { QUICK_REACTIONS } from "./notes";
 import type { ViewerSelection } from "./types";
 import type { Annotations, UploadingState } from "./use-annotations";
 
 const MAX_FILES = 4;
+const MAX_PACKAGE_FILES = 8;
 
-/** The "leave something here" panel. Reading stays primary: it is a margin panel, not a page. */
-export function NoteComposer({ selection, annotations, members, meId, onDone }: { selection: ViewerSelection; annotations: Annotations; members: RoomMember[]; meId: string; onDone: (markerId: string) => void }) {
-  const [recipient, setRecipient] = useState("room");
+export type ComposerKind = "note" | "package";
+
+/**
+ * The "leave something here" panel. Reading stays primary: it is a margin
+ * panel, not a page. A package is the same thing addressed to one friend and
+ * wrapped: a message, voice, photos, a drawing and a song that open together
+ * when they reach this spot.
+ */
+export function NoteComposer({ selection, annotations, members, meId, features, kind, onDone }: {
+  selection: ViewerSelection;
+  annotations: Annotations;
+  members: RoomMember[];
+  meId: string;
+  features?: RoomFeatures;
+  kind: ComposerKind;
+  onDone: (markerId: string) => void;
+}) {
+  const me = useMe();
+  const others = members.filter((m) => m.user_id !== meId);
+  const animated = featureOn(features, "animated_notes");
+  const [recipient, setRecipient] = useState(kind === "package" && others[0] ? others[0].user_id : "room");
+  const [title, setTitle] = useState("");
   const [attention, setAttention] = useState<NoteAttention>("gentle");
   const [body, setBody] = useState("");
   const [emoji, setEmoji] = useState<string | null>(null);
@@ -31,17 +54,21 @@ export function NoteComposer({ selection, annotations, members, meId, onDone }: 
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState<UploadingState | null>(null);
   const inputs = useRef<Record<AttachmentKind, HTMLInputElement | null>>({ image: null, audio: null, video: null });
+  const isPackage = kind === "package";
+  const maxFiles = isPackage ? MAX_PACKAGE_FILES : MAX_FILES;
+  // A package always has exactly one friend to open it.
+  const friend = others.find((m) => m.user_id === recipient) ?? (isPackage ? others[0] : undefined);
 
-  const addFiles = (list: FileList | File[] | null, kind?: AttachmentKind) => {
+  const addFiles = (list: FileList | File[] | null, fileKind?: AttachmentKind) => {
     if (!list) return;
     setError(null);
     const next = [...files];
     for (const file of Array.from(list)) {
-      if (next.length >= MAX_FILES) {
-        setError(`A note can carry up to ${MAX_FILES} attachments.`);
+      if (next.length >= maxFiles) {
+        setError(isPackage ? `A package can hold up to ${MAX_PACKAGE_FILES} things.` : `A note can carry up to ${MAX_FILES} attachments.`);
         break;
       }
-      const check = validateAttachment(file, kind);
+      const check = validateAttachment(file, fileKind);
       if (!check.ok) {
         setError(`${file.name}: ${check.error}`);
         continue;
@@ -56,11 +83,17 @@ export function NoteComposer({ selection, annotations, members, meId, onDone }: 
   async function submit(event: FormEvent) {
     event.preventDefault();
     if (empty || busy || drawing || recording) return;
+    if (isPackage && !friend) return setError("Choose who the package is for.");
     setBusy(true);
     setError(null);
     try {
       const id = await annotations.createNote(
-        { anchor: selection.anchor, position: selection.position, label: selection.label, body, emoji: emoji ?? undefined, link: showLink ? link : undefined, quote: selection.quote, files, attention, recipientId: recipient === "room" ? null : recipient },
+        {
+          anchor: selection.anchor, position: selection.position, label: selection.label, body, emoji: emoji ?? undefined,
+          link: showLink ? link : undefined, quote: selection.quote, files, attention,
+          recipientId: isPackage ? friend!.user_id : recipient === "room" ? null : recipient,
+          kind, title: isPackage ? title.trim() || `For ${friend!.display_name.split(" ")[0]}` : undefined,
+        },
         setUploading,
       );
       onDone(id);
@@ -73,16 +106,6 @@ export function NoteComposer({ selection, annotations, members, meId, onDone }: 
 
   return (
     <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
-      <header className="flex items-center gap-3 border-b border-line px-5 py-4">
-        <div className="min-w-0 flex-1">
-          <h2 className="font-display text-xl text-ink">Leave something here</h2>
-          <p className="truncate text-xs text-ink-faint">{selection.label}</p>
-        </div>
-        <SheetClose className="flex size-10 items-center justify-center rounded-full text-ink-faint hover:bg-sunk hover:text-ink" aria-label="Close" disabled={busy}>
-          <X className="size-5" aria-hidden />
-        </SheetClose>
-      </header>
-
       <div className="scroll-slim min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
         {selection.quote && (
           <blockquote className="border-l-2 border-accent/60 pl-3 font-display text-[15px] italic leading-relaxed text-ink-soft">
@@ -90,27 +113,41 @@ export function NoteComposer({ selection, annotations, members, meId, onDone }: 
           </blockquote>
         )}
 
-        <div className="grid grid-cols-2 gap-3">
-          <label className="space-y-1.5 text-xs font-medium text-ink-soft">Who can see it
-            <select aria-label="Who can see this note" value={recipient} disabled={busy} onChange={e => setRecipient(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-raised px-2 text-sm text-ink">
+        {isPackage ? (
+          <div className="space-y-3 rounded-2xl border border-line bg-sunk/40 p-3.5">
+            <label className="block text-xs font-medium text-ink-soft">
+              For
+              <select aria-label="Who the package is for" value={friend?.user_id ?? ""} disabled={busy} onChange={(e) => setRecipient(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-raised px-2 text-sm text-ink">
+                {others.map((m) => <option key={m.user_id} value={m.user_id}>{m.display_name}</option>)}
+              </select>
+            </label>
+            <label className="block text-xs font-medium text-ink-soft">
+              Label on the wrapping <span className="font-normal text-ink-faint">(they see this before it opens)</span>
+              <Input value={title} maxLength={120} disabled={busy} onChange={(e) => setTitle(e.target.value)} placeholder={friend ? `For ${friend.display_name.split(" ")[0]}` : "For…"} className="mt-1.5" />
+            </label>
+            {friend && (
+              <p className="flex items-center gap-2 text-xs leading-snug text-ink-soft">
+                <Avatar person={{ id: friend.user_id, display_name: friend.display_name, avatar_path: friend.avatar_path }} size={20} />
+                {friend.display_name.split(" ")[0]} will see it sitting sealed on their trail and can open it when they reach {selection.label}.
+              </p>
+            )}
+          </div>
+        ) : (
+          <label className="block text-xs font-medium text-ink-soft">
+            Who can see it
+            <select aria-label="Who can see this note" value={recipient} disabled={busy} onChange={(e) => setRecipient(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-raised px-2 text-sm text-ink">
               <option value="room">Everyone in the room</option>
               <option value={meId}>Only me</option>
-              {members.filter(m => m.user_id !== meId).map(m => <option key={m.user_id} value={m.user_id}>{m.display_name}</option>)}
+              {others.map((m) => <option key={m.user_id} value={m.user_id}>{m.display_name}</option>)}
             </select>
           </label>
-          <label className="space-y-1.5 text-xs font-medium text-ink-soft">Attention
-            <select aria-label="Attention level" value={attention} disabled={busy} onChange={e => setAttention(e.target.value as NoteAttention)} className="mt-1.5 h-11 w-full rounded-xl border border-line-strong bg-raised px-2 text-sm text-ink">
-              <option value="quiet">Quiet · stays still</option>
-              <option value="gentle">Gentle · little hops</option>
-              <option value="playful">Playful · hops & spins</option>
-            </select>
-          </label>
-        </div>
+        )}
+
         <Textarea
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder="A thought, a theory, a question…"
-          aria-label="Your note"
+          placeholder={isPackage ? "What would you tell them when they get here?" : "A thought, a theory, a question…"}
+          aria-label={isPackage ? "Your message" : "Your note"}
           maxLength={10000}
           rows={4}
           autoFocus
@@ -133,8 +170,10 @@ export function NoteComposer({ selection, annotations, members, meId, onDone }: 
           ))}
         </div>
 
+        {animated && <AttentionPicker value={attention} onChange={setAttention} me={{ id: me.user_id, display_name: me.display_name, avatar_path: me.avatar_path }} disabled={busy} />}
+
         {showLink && (
-          <Input type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder="https://…" aria-label="Link" disabled={busy} autoFocus />
+          <Input type="url" inputMode="url" value={link} onChange={(e) => setLink(e.target.value)} placeholder={isPackage ? "A song link: Spotify, YouTube, Apple Music…" : "https://…"} aria-label="Link" disabled={busy} autoFocus />
         )}
 
         {recording && (
@@ -178,7 +217,7 @@ export function NoteComposer({ selection, annotations, members, meId, onDone }: 
             </div>
             <p className="mt-1.5 text-xs text-ink-faint">
               Uploading {uploading.count > 1 ? `${uploading.index + 1} of ${uploading.count}: ` : ""}
-              {uploading.fileName}. Your note appears once it&apos;s safely stored.
+              {uploading.fileName}. {isPackage ? "The package is wrapped once everything is safely stored." : "Your note appears once it's safely stored."}
             </p>
           </div>
         )}
@@ -187,49 +226,53 @@ export function NoteComposer({ selection, annotations, members, meId, onDone }: 
         <FormError>{error}</FormError>
 
         <div className="flex flex-wrap gap-1.5">
-          {(["image", "audio", "video"] as AttachmentKind[]).map((kind) => (
+          {(["image", "audio", "video"] as AttachmentKind[]).map((fileKind) => (
             <input
-              key={kind}
+              key={fileKind}
               ref={(element) => {
-                inputs.current[kind] = element;
+                inputs.current[fileKind] = element;
               }}
               type="file"
-              accept={ATTACHMENT_ACCEPT[kind]}
-              multiple={kind === "image"}
+              accept={ATTACHMENT_ACCEPT[fileKind]}
+              multiple={fileKind === "image"}
               className="sr-only"
               tabIndex={-1}
               aria-hidden
               onChange={(event) => {
-                addFiles(event.target.files, kind);
+                addFiles(event.target.files, fileKind);
                 event.target.value = "";
               }}
             />
           ))}
           <Button variant="secondary" size="sm" disabled={busy || drawing} onClick={() => inputs.current.image?.click()} icon={<ImagePlus className="size-4" aria-hidden />}>
-            Photo
+            {isPackage ? "Photos" : "Photo"}
           </Button>
-          <Button variant="secondary" size="sm" disabled={busy || drawing || recording || files.length >= MAX_FILES} onClick={() => setDrawing(true)} icon={<Pencil className="size-4" aria-hidden />}>Draw</Button>
+          <Button variant="secondary" size="sm" disabled={busy || drawing || recording || files.length >= maxFiles} onClick={() => setDrawing(true)} icon={<Pencil className="size-4" aria-hidden />}>Draw</Button>
           {canRecordVoice() && (
             <Button variant="secondary" size="sm" disabled={busy || recording || drawing} onClick={() => setRecording(true)} icon={<Mic className="size-4" aria-hidden />}>
-              Record
+              {isPackage ? "Voice note" : "Record"}
             </Button>
           )}
-          <Button variant="secondary" size="sm" disabled={busy || drawing} onClick={() => inputs.current.audio?.click()} icon={<FileAudio className="size-4" aria-hidden />}>
-            Audio
+          <Button variant="secondary" size="sm" disabled={busy || drawing} onClick={() => inputs.current.audio?.click()} icon={isPackage ? <Music2 className="size-4" aria-hidden /> : <FileAudio className="size-4" aria-hidden />}>
+            {isPackage ? "Song file" : "Audio"}
           </Button>
           <Button variant="secondary" size="sm" disabled={busy || drawing} onClick={() => inputs.current.video?.click()} icon={<Film className="size-4" aria-hidden />}>
             Video
           </Button>
           <Button variant={showLink ? "quiet" : "secondary"} size="sm" disabled={busy} onClick={() => setShowLink(!showLink)} icon={<Link2 className="size-4" aria-hidden />} aria-pressed={showLink}>
-            Link
+            {isPackage ? "Song link" : "Link"}
           </Button>
         </div>
       </div>
 
       <footer className="pb-safe border-t border-line px-5 pt-3">
-        <p className="mb-2.5 text-xs leading-relaxed text-ink-faint">Friends who haven&apos;t read this far will only see that you left something here — not what.</p>
+        <p className="mb-2.5 text-xs leading-relaxed text-ink-faint">
+          {isPackage
+            ? `Only ${friend?.display_name.split(" ")[0] ?? "they"} can open it, and only once they've read this far.`
+            : "Friends who haven't read this far will only see that you left something here, not what."}
+        </p>
         <Button type="submit" size="lg" className="w-full" loading={busy} disabled={empty || recording || drawing}>
-          {busy ? (uploading ? "Uploading…" : "Leaving it…") : "Leave it here"}
+          {busy ? (uploading ? "Uploading…" : isPackage ? "Wrapping…" : "Leaving it…") : isPackage ? "Wrap it and leave it here" : "Leave it here"}
         </Button>
       </footer>
     </form>

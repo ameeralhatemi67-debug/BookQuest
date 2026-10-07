@@ -6,7 +6,7 @@
 import { Tabs } from "radix-ui";
 import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from "react";
 import { toast } from "sonner";
-import { CopyField } from "@/components/room/invite-dialog";
+import { FeatureToggles } from "@/components/room/feature-toggles";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Field, Input } from "@/components/ui/field";
@@ -15,7 +15,9 @@ import { siteUrl } from "@/lib/config";
 import { friendlyError } from "@/lib/errors";
 import { cn, formatBytes, formatDate, formatDuration, timeAgo } from "@/lib/format";
 import { formatPercent } from "@/lib/location";
+import { featuresOff } from "@/lib/features";
 import { getSupabase } from "@/lib/supabase/client";
+import type { RoomFeatures } from "@/lib/types";
 
 type Json = Record<string, unknown>;
 
@@ -44,7 +46,7 @@ interface Tester {
 }
 
 interface AdminRoom {
-  id: string; name: string; visibility: string; mode: string; member_limit: number | null; is_closed: boolean; archived_at: string | null;
+  id: string; name: string; visibility: string; mode: string; features: RoomFeatures; predictions: number; polls: number; member_limit: number | null; is_closed: boolean; archived_at: string | null;
   created_at: string; last_activity_at: string; owner: string; book_title: string; notes: number; replies: number;
   members: { user_id: string; display_name: string; role: string; status: string; furthest: number; last_read_at: string | null }[];
 }
@@ -66,7 +68,7 @@ interface Feedback {
 }
 
 interface ClientError { id: number; user_id: string | null; route: string | null; message: string; stack: string | null; context: Json; created_at: string }
-interface AlphaCode { code: string; note: string | null; max_uses: number; use_count: number; expires_at: string | null; disabled_at: string | null; created_at: string }
+interface Seats { used: number; capacity: number }
 interface AllowEntry { email: string; make_admin: boolean; note: string | null; created_at: string }
 interface ModerationRow { id: number; room_id: string | null; actor_id: string | null; action: string; target_user_id: string | null; target_id: string | null; reason: string | null; created_at: string }
 
@@ -226,7 +228,7 @@ function TestersTab({ meId }: { meId: string }) {
                     <Badge tone={tester.status === "active" ? "moss" : tester.status === "pending" ? "gold" : "danger"}>{tester.status}</Badge>
                     {tester.is_admin && <Badge tone="accent">admin</Badge>}
                   </div>
-                  <div className="mt-1 text-xs text-ink-faint">{tester.access_source ?? "no code yet"}</div>
+                  <div className="mt-1 text-xs text-ink-faint">{tester.status === "pending" ? "waiting for a seat" : (tester.access_source ?? "")}</div>
                 </Td>
                 <Td className="whitespace-nowrap text-xs">
                   {tester.rooms} rooms · {tester.books} books · {tester.notes} notes
@@ -261,159 +263,114 @@ function TestersTab({ meId }: { meId: string }) {
   );
 }
 
-// ---------------------------------------------------------------- access (codes + allowlist)
+// ---------------------------------------------------------------- access (seats + allowlist)
 const loadAccess = async () => {
   const supabase = getSupabase();
-  const [codes, allow] = await Promise.all([
-    supabase.from("alpha_invite_codes").select("code, note, max_uses, use_count, expires_at, disabled_at, created_at").order("created_at", { ascending: false }),
+  const [seats, allow] = await Promise.all([
+    supabase.rpc("alpha_seats"),
     supabase.from("alpha_allowlist").select("email, make_admin, note, created_at").order("created_at", { ascending: false }),
   ]);
-  return { data: codes.error || allow.error ? null : { codes: (codes.data ?? []) as AlphaCode[], allow: (allow.data ?? []) as AllowEntry[] }, error: codes.error ?? allow.error };
+  return { data: seats.error || allow.error ? null : { seats: seats.data as Seats, allow: (allow.data ?? []) as AllowEntry[] }, error: seats.error ?? allow.error };
 };
+
+function SeatControl({ seats, onSaved }: { seats: Seats; onSaved: () => void }) {
+  const [value, setValue] = useState(String(seats.capacity));
+  const [busy, setBusy] = useState(false);
+  const full = seats.used >= seats.capacity;
+
+  async function save(event: FormEvent) {
+    event.preventDefault();
+    setBusy(true);
+    await act(getSupabase().rpc("admin_set_alpha_seats", { p_capacity: Number(value) }), onSaved, "Seat count saved.");
+    setBusy(false);
+  }
+
+  return (
+    <Card className="space-y-4 p-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div className="max-w-xl">
+          <h3 className="font-display text-xl text-ink">Seats</h3>
+          <p className="text-sm text-ink-soft">Anyone can sign up without a code. The first readers up to the seat count are let in; everyone after waits on the Testers tab until a seat opens or you activate them.</p>
+        </div>
+        <p className="font-display text-4xl leading-none text-ink tabular-nums">
+          {seats.used}<span className="text-ink-faint">/{seats.capacity}</span>
+        </p>
+      </div>
+      <div className="h-2 overflow-hidden rounded-full bg-sunk" role="meter" aria-label="Seats taken" aria-valuemin={0} aria-valuemax={seats.capacity} aria-valuenow={seats.used}>
+        <div className={cn("h-full rounded-full transition-[width] duration-500", full ? "bg-gold" : "bg-accent")} style={{ width: `${Math.min(100, (seats.used / Math.max(1, seats.capacity)) * 100)}%` }} />
+      </div>
+      <form onSubmit={save} className="flex flex-wrap items-end gap-3">
+        <Field label="Seat count" hint="Between 1 and 75." className="w-40">
+          {(props) => <Input {...props} type="number" min={1} max={75} value={value} onChange={(e) => setValue(e.target.value)} />}
+        </Field>
+        <Button type="submit" variant="secondary" loading={busy} disabled={Number(value) === seats.capacity}>
+          Save
+        </Button>
+      </form>
+      <p className="text-xs text-ink-faint">Sign-up link to share: <span className="text-ink-soft">{siteUrl()}/signup</span></p>
+    </Card>
+  );
+}
 
 function AccessTab() {
   const state = useLoader(loadAccess);
   const supabase = getSupabase();
-  const [note, setNote] = useState("");
-  const [uses, setUses] = useState("1");
-  const [created, setCreated] = useState<string | null>(null);
   const [email, setEmail] = useState("");
-  const [busy, setBusy] = useState(false);
-
-  async function createCode(event: FormEvent) {
-    event.preventDefault();
-    setBusy(true);
-    const { data, error } = await supabase.rpc("admin_create_alpha_code", { p_note: note, p_max_uses: Number(uses) || 1, p_expires_in_days: 30 });
-    setBusy(false);
-    if (error) return void toast.error(friendlyError(error));
-    setCreated(data as string);
-    setNote("");
-    void state.reload();
-  }
 
   async function allowEmail(event: FormEvent) {
     event.preventDefault();
     await act(supabase.from("alpha_allowlist").insert({ email: email.trim().toLowerCase() }), () => {
       setEmail("");
       void state.reload();
-    }, "Added. They get access as soon as they sign up with that email.");
+    }, "Added. They get a seat as soon as they sign up with that email.");
   }
 
   return (
-    <div className="space-y-8">
-      <Card className="space-y-4 p-5">
-        <div>
-          <h3 className="font-display text-xl text-ink">Invite a tester</h3>
-          <p className="text-sm text-ink-soft">Create an alpha code and send the sign-up link. A code works for as many people as you allow, for 30 days.</p>
+    <Panel state={state}>
+      {({ seats, allow }) => (
+        <div className="space-y-8">
+          <SeatControl seats={seats} onSaved={state.reload} />
+          <section>
+            <h3 className="mb-1 font-display text-xl text-ink">Email allowlist</h3>
+            <p className="mb-3 text-sm text-ink-soft">An allowlisted email always gets in, even when every seat is taken.</p>
+            <form onSubmit={allowEmail} className="mb-3 flex flex-wrap items-end gap-3">
+              <Field label="Email" className="min-w-56 flex-1">
+                {(props) => <Input {...props} type="email" value={email} required onChange={(e) => setEmail(e.target.value)} />}
+              </Field>
+              <Button type="submit" variant="secondary" disabled={!email.trim()}>
+                Add
+              </Button>
+            </form>
+            {allow.length > 0 && (
+              <TableCard>
+                <thead>
+                  <tr>
+                    <Th>Email</Th>
+                    <Th>Admin</Th>
+                    <Th>Added</Th>
+                    <Th />
+                  </tr>
+                </thead>
+                <tbody>
+                  {allow.map((entry) => (
+                    <tr key={entry.email}>
+                      <Td className="text-ink">{entry.email}</Td>
+                      <Td>{entry.make_admin ? "yes" : "no"}</Td>
+                      <Td>{formatDate(entry.created_at)}</Td>
+                      <Td className="text-right">
+                        <Button size="sm" variant="ghost" onClick={() => act(supabase.from("alpha_allowlist").delete().eq("email", entry.email), state.reload)}>
+                          Remove
+                        </Button>
+                      </Td>
+                    </tr>
+                  ))}
+                </tbody>
+              </TableCard>
+            )}
+          </section>
         </div>
-        <form onSubmit={createCode} className="flex flex-wrap items-end gap-3">
-          <Field label="Note (who it's for)" className="min-w-48 flex-1">
-            {(props) => <Input {...props} value={note} onChange={(e) => setNote(e.target.value)} placeholder="e.g. Sara" />}
-          </Field>
-          <Field label="Uses" className="w-24">
-            {(props) => <Input {...props} type="number" min={1} max={100} value={uses} onChange={(e) => setUses(e.target.value)} />}
-          </Field>
-          <Button type="submit" loading={busy}>
-            Create code
-          </Button>
-        </form>
-        {created && (
-          <div className="animate-fade-up space-y-2 rounded-2xl border border-moss/30 bg-moss-soft/60 p-4">
-            <p className="text-sm text-ink">
-              New code: <span className="font-mono font-semibold tracking-wider">{created}</span>. Send this link:
-            </p>
-            <CopyField value={`${siteUrl()}/signup?code=${created}`} label="Sign-up link with code" />
-          </div>
-        )}
-      </Card>
-
-      <Panel state={state}>
-        {({ codes, allow }) => (
-          <>
-            <section>
-              <h3 className="mb-3 font-display text-xl text-ink">Alpha codes</h3>
-              {codes.length === 0 ? (
-                <p className="text-sm text-ink-faint">No codes yet.</p>
-              ) : (
-                <TableCard>
-                  <thead>
-                    <tr>
-                      <Th>Code</Th>
-                      <Th>Note</Th>
-                      <Th>Used</Th>
-                      <Th>Expires</Th>
-                      <Th className="text-right">Actions</Th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {codes.map((code) => {
-                      const expired = code.expires_at !== null && new Date(code.expires_at) < new Date();
-                      const dead = Boolean(code.disabled_at) || expired || code.use_count >= code.max_uses;
-                      return (
-                        <tr key={code.code}>
-                          <Td className="font-mono text-[13px] tracking-wider text-ink">{code.code}</Td>
-                          <Td>{code.note ?? "—"}</Td>
-                          <Td>
-                            {code.use_count} / {code.max_uses}
-                          </Td>
-                          <Td className="whitespace-nowrap">{code.disabled_at ? <Badge tone="danger">disabled</Badge> : expired ? <Badge>expired</Badge> : code.expires_at ? formatDate(code.expires_at) : "never"}</Td>
-                          <Td className="text-right">
-                            {!dead && (
-                              <Button size="sm" variant="ghost" onClick={() => act(supabase.from("alpha_invite_codes").update({ disabled_at: new Date().toISOString() }).eq("code", code.code), state.reload, "Code disabled.")}>
-                                Disable
-                              </Button>
-                            )}
-                          </Td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </TableCard>
-              )}
-            </section>
-
-            <section>
-              <h3 className="mb-1 font-display text-xl text-ink">Email allowlist</h3>
-              <p className="mb-3 text-sm text-ink-soft">An allowlisted email gets access on sign-up without a code.</p>
-              <form onSubmit={allowEmail} className="mb-3 flex flex-wrap items-end gap-3">
-                <Field label="Email" className="min-w-56 flex-1">
-                  {(props) => <Input {...props} type="email" value={email} required onChange={(e) => setEmail(e.target.value)} />}
-                </Field>
-                <Button type="submit" variant="secondary" disabled={!email.trim()}>
-                  Add
-                </Button>
-              </form>
-              {allow.length > 0 && (
-                <TableCard>
-                  <thead>
-                    <tr>
-                      <Th>Email</Th>
-                      <Th>Admin</Th>
-                      <Th>Added</Th>
-                      <Th />
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allow.map((entry) => (
-                      <tr key={entry.email}>
-                        <Td className="text-ink">{entry.email}</Td>
-                        <Td>{entry.make_admin ? "yes" : "no"}</Td>
-                        <Td>{formatDate(entry.created_at)}</Td>
-                        <Td className="text-right">
-                          <Button size="sm" variant="ghost" onClick={() => act(supabase.from("alpha_allowlist").delete().eq("email", entry.email), state.reload)}>
-                            Remove
-                          </Button>
-                        </Td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </TableCard>
-              )}
-            </section>
-          </>
-        )}
-      </Panel>
-    </div>
+      )}
+    </Panel>
   );
 }
 
@@ -468,6 +425,7 @@ function RoomMarkers({ roomId }: { roomId: string }) {
 function RoomsTab() {
   const state = useLoader(loadRooms);
   const [open, setOpen] = useState<string | null>(null);
+  const [tuning, setTuning] = useState<string | null>(null);
   return (
     <Panel state={state}>
       {(rooms) =>
@@ -490,7 +448,10 @@ function RoomsTab() {
                           {room.archived_at && <Badge tone="gold">archived</Badge>}
                         </div>
                         <p className="mt-0.5 text-sm text-ink-soft">
-                          {room.book_title} · owner {room.owner} · {room.notes} notes · {room.replies} replies · active {timeAgo(room.last_activity_at)}
+                          {room.book_title} · owner {room.owner} · {room.notes} notes · {room.replies} replies · {room.predictions} predictions · {room.polls} polls · active {timeAgo(room.last_activity_at)}
+                        </p>
+                        <p className="mt-1 text-xs text-ink-faint">
+                          {featuresOff(room.features).length === 0 ? "Every feature on" : `Off: ${featuresOff(room.features).join(", ").replaceAll("_", " ")}`}
                         </p>
                         <ul className="mt-2 flex flex-wrap gap-1.5">
                           {activeMembers.map((m) => (
@@ -505,6 +466,9 @@ function RoomsTab() {
                         </ul>
                       </div>
                       <div className="flex gap-1.5">
+                        <Button size="sm" variant="ghost" onClick={() => setTuning(tuning === room.id ? null : room.id)} aria-expanded={tuning === room.id}>
+                          Features
+                        </Button>
                         <Button size="sm" variant="ghost" onClick={() => setOpen(open === room.id ? null : room.id)} aria-expanded={open === room.id}>
                           {open === room.id ? "Hide notes" : "Notes"}
                         </Button>
@@ -517,6 +481,11 @@ function RoomsTab() {
                         </Button>
                       </div>
                     </div>
+                    {tuning === room.id && (
+                      <div className="mt-3 border-t border-line pt-3">
+                        <FeatureToggles roomId={room.id} features={room.features} onSaved={state.reload} />
+                      </div>
+                    )}
                     {open === room.id && (
                       <div className="mt-3 border-t border-line pt-2">
                         <p className="py-1 text-xs text-ink-faint">Where and by whom — never what a note says.</p>
@@ -662,6 +631,7 @@ function FeedbackTab() {
                         {item.route ?? "—"}
                         {typeof item.context.location === "string" && ` · ${item.context.location}`}
                         {typeof item.context.progress === "number" && ` · ${formatPercent(item.context.progress)}`}
+                        {Array.isArray(item.context.features_off) && ` · off: ${item.context.features_off.length ? (item.context.features_off as string[]).join(", ").replaceAll("_", " ") : "none"}`}
                         {typeof item.context.device === "string" && ` · ${item.context.device}`}
                         {typeof item.context.viewport === "string" && ` ${item.context.viewport}`}
                         {typeof item.context.theme === "string" && ` · ${item.context.theme}`}

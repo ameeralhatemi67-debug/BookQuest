@@ -7,13 +7,15 @@
 // once when the book is uploaded and shared by every reader, so "43%" is the
 // same sentence for everyone.
 import type { Book, Contents, Location, Rendition } from "epubjs";
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState } from "react";
+import { flushSync } from "react-dom";
 import { EPUB_LOCATION_CHARS, loadEpubJs } from "@/lib/books/epub";
 import { epubLabel, epubProgress, epubReach, isEpubAnchor, type EpubAnchor } from "@/lib/location";
 import { getSupabase } from "@/lib/supabase/client";
 import { personHue } from "@/components/ui/avatar";
 import { FONT_STACK, ReaderError, THEME_COLORS, WIDTH_PX, type ReaderSettings, type TocItem, type ViewerHandle, type ViewerProps, type ViewerSelection } from "./types";
 import { bindDoubleTap } from "./double-tap";
+import { flipPage, type FlipDirection } from "./page-flip";
 
 const BOOK_CACHE = "marginalia-books-v1";
 
@@ -107,6 +109,8 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
 ) {
   const host = useRef<HTMLDivElement>(null);
   const frame = useRef<HTMLDivElement>(null);
+  /** The whole sheet of paper: what turns when a page flips. */
+  const sheet = useRef<HTMLDivElement>(null);
   const internals = useRef<EpubInternals | null>(null);
   const callbacks = useRef({ onReady, onRelocate, onSelection, onAddNote, onToggleChrome, onError, onLoadProgress });
   const settingsRef = useRef(settings);
@@ -114,6 +118,38 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
   const [ready, setReady] = useState(false);
   const [placements, setPlacements] = useState<{ id: string; top: number; pinX: number; pinY: number }[]>([]);
   const [layoutTick, setLayoutTick] = useState(0);
+  /** True while a page is turning: margin avatars wait for the new page. */
+  const [turning, setTurning] = useState(false);
+  // The flow is chosen when the book opens; the reader remounts this viewer to switch.
+  const [scrolled] = useState(settings.turn === "scroll");
+
+  /** Every way of turning a page comes through here, so every turn can flip. */
+  const turn = useCallback((direction: FlipDirection) => {
+    const rendition = internals.current?.rendition;
+    if (!rendition) return;
+    const go = () => (direction > 0 ? rendition.next() : rendition.prev());
+    if (settingsRef.current.turn !== "flip" || scrolled) return void go();
+    // epub.js runs navigation through a requestAnimationFrame queue, and no frames run while a
+    // View Transition waits for its update. So the turn drives the view manager directly: inside a
+    // chapter that is a synchronous scroll; across chapters it starts loading the next document and
+    // the transition waits only briefly. The location is reported once the sheet has landed.
+    const manager = (rendition as unknown as { manager?: { next(): Promise<void> | void; prev(): Promise<void> | void; container?: HTMLElement } }).manager;
+    void flipPage(direction, async () => {
+      flushSync(() => setTurning(true));
+      if (!manager) return void (await Promise.race([go(), new Promise((r) => setTimeout(r, 400))]));
+      const before = manager.container?.scrollLeft;
+      const pending = direction > 0 ? manager.next() : manager.prev();
+      if (manager.container && manager.container.scrollLeft !== before) return;
+      await Promise.race([pending, new Promise((r) => setTimeout(r, 450))]);
+    }, { before: () => ({ right: sheet.current }), after: () => ({ right: sheet.current }) }).finally(() => {
+      setTurning(false);
+      (rendition as unknown as { reportLocation?: () => void }).reportLocation?.();
+    });
+  }, [scrolled]);
+  const turnRef = useRef(turn);
+  useLayoutEffect(() => {
+    turnRef.current = turn;
+  });
 
   useLayoutEffect(() => {
     callbacks.current = { onReady, onRelocate, onSelection, onAddNote, onToggleChrome, onError, onLoadProgress };
@@ -186,13 +222,9 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
       walk((book.navigation?.toc ?? []) as never, 0);
 
       if (!host.current) return;
-      rendition = book.renderTo(host.current, {
-        width: "100%",
-        height: "100%",
-        flow: "paginated",
-        spread: "none",
-        allowScriptedContent: false, // book scripts never run
-      });
+      rendition = book.renderTo(host.current, scrolled
+        ? { width: "100%", height: "100%", flow: "scrolled", manager: "continuous", spread: "none", allowScriptedContent: false }
+        : { width: "100%", height: "100%", flow: "paginated", spread: "none", allowScriptedContent: false }); // book scripts never run
 
       const state: EpubInternals = { book, rendition, total, chapters, location: null };
       internals.current = state;
@@ -254,8 +286,8 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
           const frameRect = (contents.window.frameElement as HTMLElement | null)?.getBoundingClientRect();
           if (!container || !frameRect) return;
           const zone = (event.clientX + frameRect.left - container.left) / container.width;
-          if (zone < 0.22) void rendition!.prev();
-          else if (zone > 0.78) void rendition!.next();
+          if (!scrolled && zone < 0.22) turnRef.current(-1);
+          else if (!scrolled && zone > 0.78) turnRef.current(1);
           else callbacks.current.onToggleChrome();
         }));
 
@@ -272,10 +304,9 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
           const dy = t.clientY - touch.y;
           const quick = Date.now() - touch.t < 700;
           touch = null;
-          if (!quick || Math.abs(dx) < 50 || Math.abs(dy) > 60) return;
+          if (scrolled || !quick || Math.abs(dx) < 50 || Math.abs(dy) > 60) return;
           if (!doc.getSelection()?.isCollapsed) return;
-          if (dx < 0) void rendition!.next();
-          else void rendition!.prev();
+          turnRef.current(dx < 0 ? 1 : -1);
         }, { passive: true });
 
         // Clearing the selection dismisses the floating toolbar.
@@ -320,8 +351,9 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
       });
 
       rendition.on("keyup", (event: KeyboardEvent) => {
-        if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") void rendition!.next();
-        else if (event.key === "ArrowLeft" || event.key === "PageUp") void rendition!.prev();
+        if (scrolled) return;
+        if (event.key === "ArrowRight" || event.key === "PageDown" || event.key === " ") turnRef.current(1);
+        else if (event.key === "ArrowLeft" || event.key === "PageUp") turnRef.current(-1);
       });
 
       const start = isEpubAnchor(initialAnchor) ? initialAnchor.cfi : undefined;
@@ -396,7 +428,7 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
     if (!state || !ready) return;
     const wanted = new Map<string, { cfiRange: string; hue: number }>();
     for (const marker of markers) {
-      if (marker.open && isEpubAnchor(marker.anchor) && marker.anchor.cfiRange) {
+      if (marker.open && (marker.kind ?? "note") !== "echo" && marker.kind !== "poll" && isEpubAnchor(marker.anchor) && marker.anchor.cfiRange) {
         wanted.set(marker.id, { cfiRange: marker.anchor.cfiRange, hue: personHue(marker.authorId) });
       }
     }
@@ -426,6 +458,26 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
     }
   }, [markers, ready]);
 
+  // ------------------------------------------------------------ scrolled flow: keep margin markers with the text
+  useEffect(() => {
+    if (!ready || !scrolled) return;
+    const scroller = host.current?.querySelector<HTMLElement>(".epub-container");
+    if (!scroller) return;
+    let frameId = 0;
+    const onScroll = () => {
+      if (frameId) return;
+      frameId = requestAnimationFrame(() => {
+        frameId = 0;
+        setLayoutTick((n) => n + 1);
+      });
+    };
+    scroller.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      scroller.removeEventListener("scroll", onScroll);
+      if (frameId) cancelAnimationFrame(frameId);
+    };
+  }, [ready, scrolled]);
+
   // ------------------------------------------------------------ margin markers for the visible page
   useEffect(() => {
     const state = internals.current;
@@ -453,8 +505,10 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
           rect = element.getBoundingClientRect();
         }
         const left = rect.left + frameRect.left;
-        // Only markers whose anchor falls inside the visible page (column).
+        // Only markers whose anchor falls inside the visible page (column), or the visible stretch when scrolling.
         if (left < box.left - 2 || left > box.right - 2) continue;
+        const top = rect.top + frameRect.top;
+        if (scrolled && (top < box.top - 4 || top > box.bottom - 12)) continue;
         const pinX = marker.anchor.x === undefined ? left - box.left : marker.anchor.x * box.width;
         const pinY = marker.anchor.y === undefined ? rect.top + frameRect.top - box.top : marker.anchor.y * box.height;
         next.push({ id: marker.id, top: pinY, pinX, pinY });
@@ -473,7 +527,7 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
       cancelAnimationFrame(frameId);
       clearTimeout(late);
     };
-  }, [markers, draftAnchor, ready, layoutTick, settings.fontSize, settings.lineHeight, settings.font, settings.width]);
+  }, [markers, draftAnchor, ready, layoutTick, scrolled, settings.fontSize, settings.lineHeight, settings.font, settings.width]);
 
   // ------------------------------------------------------------ keyboard (outside the book iframe)
   useEffect(() => {
@@ -482,21 +536,22 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
       if (target?.closest("input, textarea, select, [contenteditable='true'], [role='dialog'], [role='menu']")) return;
       const rendition = internals.current?.rendition;
       if (!rendition) return;
+      if (scrolled) return;
       if (event.key === "ArrowRight" || event.key === "PageDown") {
         event.preventDefault();
-        void rendition.next();
+        turnRef.current(1);
       } else if (event.key === "ArrowLeft" || event.key === "PageUp") {
         event.preventDefault();
-        void rendition.prev();
+        turnRef.current(-1);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [scrolled]);
 
   useImperativeHandle(ref, () => ({
-    next: () => void internals.current?.rendition.next(),
-    prev: () => void internals.current?.rendition.prev(),
+    next: () => turn(1),
+    prev: () => turn(-1),
     async goToAnchor(anchor) {
       if (isEpubAnchor(anchor)) await internals.current?.rendition.display(anchor.cfi).catch(() => {});
     },
@@ -529,14 +584,14 @@ export const EpubViewer = forwardRef<ViewerHandle, ViewerProps & { size: number 
   const byId = new Map(markers.map((m) => [m.id, m]));
 
   return (
-    <div className="reader-page relative mx-auto flex h-full w-full justify-center px-4 py-4 sm:px-12 sm:py-6" style={{ maxWidth: WIDTH_PX[settings.width] + 96 }}>
-      <div ref={frame} data-note-surface className="relative h-full w-full min-w-0">
+    <div ref={sheet} className="reader-page relative mx-auto flex h-full w-full justify-center px-4 py-4 sm:px-12 sm:py-6" style={{ maxWidth: WIDTH_PX[settings.width] + 96 }}>
+      <div ref={frame} data-note-surface data-turning={turning ? "true" : undefined} className="relative h-full w-full min-w-0">
         {/* epub.js renders the book's iframe into this element */}
         <div ref={host} className="h-full w-full" style={{ colorScheme: settings.theme === "dark" ? "dark" : "light" }} />
-        {placements.map(p => (p.id === "draft" || byId.get(p.id)?.open) && <span key={`pin-${p.id}`} data-note-pin={p.id} className={`note-pin ${p.id === "draft" ? "note-pin-draft" : ""}`} style={{ left: p.pinX, top: p.pinY, background: p.id === "draft" ? undefined : `oklch(0.62 0.12 ${personHue(byId.get(p.id)!.authorId)})` }} aria-hidden />)}
+        {!turning && placements.map(p => (p.id === "draft" || (byId.get(p.id)?.open && !/^(poll|echo):/.test(p.id))) && <span key={`pin-${p.id}`} data-note-pin={p.id} className={`note-pin ${p.id === "draft" ? "note-pin-draft" : ""}`} style={{ left: p.pinX, top: p.pinY, background: p.id === "draft" ? undefined : `oklch(0.62 0.12 ${personHue(byId.get(p.id)!.authorId)})` }} aria-hidden />)}
         {/* margin layer: things left on this page */}
-        <div className="pointer-events-none absolute inset-y-0 -right-2 w-0 sm:-right-9" aria-label="Notes on this page">
-          {placements.map((placement) => {
+        <div data-note-layer className="pointer-events-none absolute inset-y-0 -right-2 w-0 sm:-right-9" aria-label="Notes on this page">
+          {!turning && placements.map((placement) => {
             const marker = byId.get(placement.id);
             if (!marker) return null;
             return (

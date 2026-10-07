@@ -38,7 +38,7 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
       const api = await apiClient(email);
       const { data: auth } = await api.auth.getUser();
       await composer.getByLabel("Who can see this note").selectOption(auth.user!.id);
-      await composer.getByLabel("Attention level").selectOption("playful");
+      await composer.getByRole("radiogroup", { name: "Attention level" }).getByRole("radio", { name: "Excited" }).click();
       await composer.getByLabel("Your note").fill("A little thought from this exact spot.");
       await composer.getByRole("button",{name:"Leave it here"}).click();
       await expect(composer).toBeHidden();
@@ -83,7 +83,7 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
         await page.mouse.up();
       }
       await expect(avatar).toHaveAttribute("data-sleeping","true");
-      await expect(avatar).toHaveAttribute("data-attention","quiet");
+      await expect(avatar).toHaveAttribute("data-attention","still");
       const moved = (await avatar.boundingBox())!, surface=(await avatar.locator('xpath=ancestor::*[@data-note-surface]').boundingBox())!;
       expect(moved.x).toBeGreaterThanOrEqual(surface.x-1); expect(moved.y).toBeGreaterThanOrEqual(surface.y-1);
       expect(moved.y+moved.height).toBeLessThanOrEqual(surface.y+surface.height+1);

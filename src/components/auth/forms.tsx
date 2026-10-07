@@ -60,7 +60,7 @@ export function LoginForm({ next }: { next?: string }) {
         Sign in
       </Button>
       <p className="text-center text-sm text-ink-soft">
-        Have an alpha invitation?{" "}
+        New here?{" "}
         <Link href={next ? `/signup?next=${encodeURIComponent(next)}` : "/signup"} className="font-medium text-accent-ink underline-offset-4 hover:underline">
           Create your account
         </Link>
@@ -69,12 +69,11 @@ export function LoginForm({ next }: { next?: string }) {
   );
 }
 
-export function SignupForm({ next, code }: { next?: string; code?: string }) {
+export function SignupForm({ next }: { next?: string }) {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [alphaCode, setAlphaCode] = useState(code ?? "");
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -90,8 +89,8 @@ export function SignupForm({ next, code }: { next?: string; code?: string }) {
       email: email.trim(),
       password,
       options: {
-        // Read by the database trigger that creates the profile and grants alpha access.
-        data: { display_name: name.trim(), alpha_code: alphaCode.trim() },
+        // Read by the database trigger that creates the profile and takes a seat in the alpha.
+        data: { display_name: name.trim() },
         emailRedirectTo: `${siteUrl()}/auth/confirm?next=${encodeURIComponent(destination)}`,
       },
     });
@@ -141,11 +140,6 @@ export function SignupForm({ next, code }: { next?: string; code?: string }) {
       <Field label="Password" hint={`At least ${MIN_PASSWORD} characters.`}>
         {(props) => (
           <Input {...props} type="password" name="password" autoComplete="new-password" required minLength={MIN_PASSWORD} value={password} onChange={(e) => setPassword(e.target.value)} />
-        )}
-      </Field>
-      <Field label="Alpha code" hint="From your invitation. You can also add it after signing up.">
-        {(props) => (
-          <Input {...props} name="alpha-code" autoComplete="off" autoCapitalize="characters" spellCheck={false} className="font-mono uppercase tracking-wider" value={alphaCode} onChange={(e) => setAlphaCode(e.target.value)} />
         )}
       </Field>
       <Button type="submit" size="lg" className="w-full" loading={busy} disabled={!email || !password || !name}>
@@ -249,38 +243,36 @@ export function ResetPasswordForm() {
   );
 }
 
-export function AlphaCodeForm({ next }: { next?: string }) {
+/** For readers who arrived after every seat was taken: takes the next free one. */
+export function ClaimSeatButton({ next }: { next?: string }) {
   const router = useRouter();
-  const [code, setCode] = useState("");
+  const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function claim() {
     setBusy(true);
     setError(null);
-    const { error: redeemError } = await getSupabase().rpc("redeem_alpha_code", { p_code: code });
-    if (redeemError) {
-      setError(friendlyError(redeemError));
-      setBusy(false);
+    setNotice(null);
+    const { data, error: claimError } = await getSupabase().rpc("claim_alpha_seat");
+    setBusy(false);
+    if (claimError) return setError(friendlyError(claimError));
+    if ((data as { status: string }).status === "active") {
+      router.replace(safeNext(next));
+      router.refresh();
       return;
     }
-    router.replace(safeNext(next));
-    router.refresh();
+    setNotice("Still full. You'll get the next seat that opens, or the person running the alpha can let you in.");
   }
 
   return (
-    <form onSubmit={submit} className="space-y-4" noValidate>
+    <div className="space-y-4">
       <FormError>{error}</FormError>
-      <Field label="Alpha code">
-        {(props) => (
-          <Input {...props} name="alpha-code" autoComplete="off" autoCapitalize="characters" spellCheck={false} autoFocus className="font-mono uppercase tracking-wider" value={code} onChange={(e) => setCode(e.target.value)} />
-        )}
-      </Field>
-      <Button type="submit" size="lg" className="w-full" loading={busy} disabled={code.trim().length < 4}>
-        Unlock access
+      {notice && <FormNotice>{notice}</FormNotice>}
+      <Button size="lg" className="w-full" loading={busy} onClick={claim}>
+        Check for a free seat
       </Button>
-    </form>
+    </div>
   );
 }
 

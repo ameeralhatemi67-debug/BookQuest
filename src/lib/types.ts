@@ -62,7 +62,11 @@ export interface ReadingStats {
   active_reading_seconds?: number;
 }
 
-export type NoteAttention = "quiet" | "gentle" | "playful";
+/** How a note asks for attention once the reader reaches it: whisper → shout. */
+export type NoteAttention = "quiet" | "gentle" | "playful" | "knock" | "shout";
+
+/** Per-room experiment switches. A missing key means the feature is on. */
+export type RoomFeatures = Partial<Record<import("@/lib/features").FeatureKey, boolean>>;
 
 export interface RoomMember extends ReadingStats {
   user_id: string;
@@ -94,6 +98,7 @@ interface RoomBase {
   description: string | null;
   visibility: RoomVisibility;
   mode: RoomModeId;
+  features?: RoomFeatures;
   member_limit: number | null;
   capacity: number;
   is_closed: boolean;
@@ -115,6 +120,10 @@ export interface RoomCard extends RoomBase {
   /** Notes this reader has reached but not opened yet. */
   unseen: number;
   note_count: number;
+  /** Packages addressed to this reader that are still ahead of them. */
+  packages_waiting?: number;
+  /** Sealed predictions this reader has reached but not opened. */
+  predictions_ready?: number;
 }
 
 export interface RoomDetail extends RoomCard {
@@ -167,6 +176,8 @@ export interface RoomInvite {
 export interface Marker {
   attention: NoteAttention;
   recipient_id: string | null;
+  kind?: "note" | "package";
+  package_title?: string | null;
   id: string;
   room_id: string;
   book_id: string;
@@ -225,7 +236,8 @@ export interface Unlock {
 
 export type ActivityType =
   | "room_created" | "joined" | "left" | "removed" | "started_reading" | "chapter_completed"
-  | "milestone" | "finished" | "passed" | "note_left" | "replied" | "room_updated" | "room_archived";
+  | "milestone" | "finished" | "passed" | "note_left" | "replied" | "room_updated" | "room_archived"
+  | "prediction_sealed" | "poll_added" | "ritual_started" | "afterparty";
 
 export interface Activity {
   id: number;
@@ -238,7 +250,7 @@ export interface Activity {
 
 export type NotificationType =
   | "reply" | "reaction" | "unlocked" | "note_behind" | "member_joined" | "invited"
-  | "finished" | "role_changed" | "removed" | "room_changed";
+  | "finished" | "role_changed" | "removed" | "room_changed" | "afterparty" | "package";
 
 export interface NotificationItem {
   id: string;
@@ -314,4 +326,164 @@ export interface SearchResults {
   books: (BookSummary & { mine: boolean })[];
   rooms: { id: string; name: string; description: string | null; visibility: RoomVisibility; mode: RoomModeId; is_member: boolean; book: BookSummary; member_count: number }[];
   people: (Person & { shared_rooms: { id: string; name: string }[] })[];
+}
+
+// ---------------------------------------------------------------- the social layer
+export interface OutlineEntry {
+  label: string;
+  start: number;
+  depth: number;
+}
+
+export type PredictionVerdict = "called_it" | "close" | "way_off";
+
+export interface Prediction {
+  id: string;
+  author_id: string;
+  made_at: number;
+  made_label: string | null;
+  opens_at: number;
+  opens_label: string | null;
+  opens_kind: "chapter" | "point" | "end";
+  hide_from_author: boolean;
+  created_at: string;
+  /** Readable by this viewer right now (always, for an author who did not hide it). */
+  open: boolean;
+  /** The viewer has reached its opening point: it can be revealed. */
+  reached: boolean;
+  body: string | null;
+  revealed_at: string | null;
+  my_verdict: PredictionVerdict | null;
+  verdicts: Partial<Record<PredictionVerdict, number>> | null;
+}
+
+export interface Poll {
+  id: string;
+  author_id: string;
+  position: number;
+  anchor: Anchor;
+  label: string | null;
+  created_at: string;
+  reached: boolean;
+  question: string | null;
+  options: string[] | null;
+  my_vote: number | null;
+  votes: number;
+  /** Only after this viewer has voted. */
+  results: { option: number; user_id: string }[] | null;
+}
+
+export type RitualKind = "predict_before" | "vote_before" | "song_within" | "hold_until" | "custom";
+
+export interface Ritual {
+  id: string;
+  kind: RitualKind;
+  title: string;
+  detail: string | null;
+  created_by: string;
+  starts_at: number | null;
+  target_at: number | null;
+  target_label: string | null;
+  until_at: string | null;
+  poll_id: string | null;
+  created_at: string;
+  ended_at: string | null;
+  members: { user_id: string; done: boolean }[];
+}
+
+export interface Afterparty {
+  chapter_index: number;
+  label: string | null;
+  start_at: number;
+  end_at: number;
+  opened_at: string;
+}
+
+export interface WeatherPoint {
+  /** position, rounded to 0.001 */
+  p: number;
+  e: string;
+  n: number;
+}
+
+export interface RoomLayer {
+  features: RoomFeatures;
+  outline: OutlineEntry[] | null;
+  furthest: number;
+  predictions: Prediction[];
+  polls: Poll[];
+  rituals: Ritual[];
+  afterparties: Afterparty[];
+  weather: WeatherPoint[];
+  cues: { position: number; author_id: string; open: boolean }[];
+  my_rating: { stars: number; line: string | null } | null;
+}
+
+export interface Echo {
+  id: string;
+  room_id: string;
+  room_name: string;
+  author_id: string;
+  author_name: string;
+  author_avatar: string | null;
+  mine: boolean;
+  position: number;
+  anchor: Anchor;
+  label: string | null;
+  created_at: string;
+  body: string | null;
+  emoji: string | null;
+  quote: string | null;
+  link_url: string | null;
+  media: ("image" | "audio" | "video")[];
+}
+
+export interface AwayMember {
+  user_id: string;
+  from: number;
+  to: number;
+  finished: boolean;
+  left_ahead: number;
+  packages: number;
+  replies: number;
+  reply_label: string | null;
+  reply_marker: string | null;
+  predictions: number;
+}
+
+export interface AwaySummary {
+  since: string | null;
+  me: number;
+  members: AwayMember[];
+  afterparties: { chapter_index: number; label: string | null }[];
+}
+
+export interface VaultNote {
+  marker_id: string;
+  author_id: string;
+  label: string | null;
+  body: string | null;
+  emoji: string | null;
+  quote: string | null;
+  created_at?: string;
+  reactions?: number;
+  replies?: number;
+  laughs?: number;
+}
+
+export interface Vault {
+  room: { id: string; name: string; mode: RoomModeId; created_at: string };
+  book: BookSummary;
+  readers: { user_id: string; display_name: string; avatar_path: string | null; status: MemberStatus; furthest: number; started_at: string | null; completed_at: string | null; active_reading_seconds: number }[];
+  predictions: { id: string; author_id: string; body: string; made_at: number; made_label: string | null; opens_label: string | null; opens_kind: Prediction["opens_kind"]; created_at: string; my_verdict: PredictionVerdict | null; verdicts: Partial<Record<PredictionVerdict, number>> | null }[];
+  first_note: VaultNote | null;
+  most_reacted: VaultNote | null;
+  funniest: VaultNote | null;
+  polls: { id: string; author_id: string; question: string; options: string[]; label: string | null; position: number; results: { option: number; user_id: string }[] }[];
+  ratings: { user_id: string; stars: number; line: string | null }[];
+  soundtrack: { id: string; title: string; author_id: string; starts_at: number | null; label: string | null }[];
+  chapters: { index: number; label: string; start_at: number; end_at: number; notes: number; replies: number }[];
+  images: { id: string; bucket: string; path: string; marker_id: string; author_id: string; width: number | null; height: number | null; label: string | null }[];
+  timeline: { user_id: string; furthest: number; at: string }[];
+  totals: { notes: number; replies: number; reactions: number; predictions: number; polls: number; songs: number };
 }

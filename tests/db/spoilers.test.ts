@@ -58,7 +58,7 @@ describe("spoiler lock: authorization, not decoration", () => {
       expect(markers.every((m) => m.author_id === amir.id)).toBe(true);
       // The marker table structurally cannot leak: it has no payload columns.
       expect(Object.keys(markers[0]).sort()).toEqual(
-        ["anchor", "attention", "author_id", "book_id", "created_at", "id", "location_label", "position", "published_at", "recipient_id", "removed_at", "removed_by", "room_id"],
+        ["anchor", "attention", "author_id", "book_id", "created_at", "id", "kind", "location_label", "package_title", "position", "published_at", "recipient_id", "removed_at", "removed_by", "room_id"],
       );
       for (const marker of markers) {
         expect(JSON.stringify(marker)).not.toMatch(/did NOT see|map|😱|example\.com|butler/);

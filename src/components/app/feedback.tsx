@@ -60,6 +60,7 @@ export function FeedbackDialog({ children }: { children: ReactNode }) {
       context: {
         location: context.label ?? null,
         progress: context.progress ?? null,
+        features_off: context.featuresOff ?? null,
         viewport: `${window.innerWidth}x${window.innerHeight}`,
         device: deviceClass(),
         user_agent: navigator.userAgent.slice(0, 300),

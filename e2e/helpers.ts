@@ -5,7 +5,6 @@ import { join } from "node:path";
 
 // Test-only credentials for accounts created on a LOCAL backend during a run.
 export const PASSWORD = "local-e2e-password-1";
-export const ALPHA_CODE = "LOCAL-ALPHA";
 
 const run = Date.now().toString(36);
 export const emailFor = (name: string) => `${name.toLowerCase().replace(/\s+/g, ".")}.${run}@example.test`;
@@ -43,13 +42,12 @@ export function anonApi(): SupabaseClient {
 }
 
 // ---------------------------------------------------------------- UI flows
-export async function signUp(page: Page, name: string, options: { code?: string | null; next?: string } = {}): Promise<string> {
+export async function signUp(page: Page, name: string, options: { next?: string } = {}): Promise<string> {
   const email = emailFor(name);
   await page.goto(options.next ? `/signup?next=${encodeURIComponent(options.next)}` : "/signup");
   await page.getByLabel("Your name").fill(name);
   await page.getByLabel("Email").fill(email);
   await page.getByLabel("Password").fill(PASSWORD);
-  if (options.code !== null) await page.getByLabel("Alpha code").fill(options.code ?? ALPHA_CODE);
   await page.getByRole("button", { name: "Create account" }).click();
   return email;
 }
@@ -118,8 +116,11 @@ export async function waitForSaved(page: Page, atLeast: number) {
 }
 
 export async function goToChapter(page: Page, title: string | RegExp) {
-  await page.getByRole("button", { name: "Contents" }).click();
-  const panel = page.getByRole("dialog", { name: "Contents" });
+  await page.getByRole("button", { name: /^(Map and contents|Contents)$/ }).click();
+  const panel = page.getByRole("dialog", { name: /^(Map and contents|Contents)$/ });
+  // With the book map on, the nested contents live on their own tab.
+  const tab = panel.getByRole("tab", { name: "Contents" });
+  if (await tab.isVisible().catch(() => false)) await tab.click();
   await panel.getByRole("button", { name: title }).click();
   await expect(panel).toBeHidden();
 }

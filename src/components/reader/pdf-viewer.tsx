@@ -13,10 +13,13 @@ import { pdfLayout } from "@/lib/books/pdf-layout";
 import { isPdfAnchor, mergeLineRects, normalizeRect, pdfAnchorProgress, pdfLabel, pdfViewState, type NormRect, type PdfAnchor } from "@/lib/location";
 import { ReaderError, type TocItem, type ViewerHandle, type ViewerMarker, type ViewerProps, type ViewerSelection } from "./types";
 import { bindDoubleTap } from "./double-tap";
+import { flipPage, type FlipDirection } from "./page-flip";
 
 const PAGE_GAP = 16;
 const MAX_CANVAS_PIXELS = 12_000_000; // keeps memory sane on phones at high zoom
 const OVERSCAN = 1; // pages rendered above / below the viewport
+// Turning a page shows the next sheet instantly, so it must already be painted.
+const FLIP_OVERSCAN = 2;
 
 interface Size {
   width: number;
@@ -141,6 +144,10 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
   const restored = useRef(false);
   const pendingAnchor = useRef<PdfAnchor | null>(isPdfAnchor(initialAnchor) ? initialAnchor : null);
   const currentAnchor = useRef<PdfAnchor | null>(null);
+  const settingsRef = useRef(settings);
+  useLayoutEffect(() => {
+    settingsRef.current = settings;
+  });
 
   useLayoutEffect(() => {
     callbacks.current = { onReady, onRelocate, onSelection, onAddNote, onError, onLoadProgress };
@@ -218,6 +225,8 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
 
   const pageCount = doc?.numPages ?? 0;
   const layout = useMemo(() => pdfLayout(Array.from({ length: pageCount }, (_, index) => sizes.get(index + 1) ?? baseSize ?? { width: 612, height: 792 }), container.width, container.height, settings.zoom), [pageCount, sizes, baseSize, container, settings.zoom]);
+  /** Book-like turning applies to fitted pages; an enlarged page still scrolls within itself. */
+  const flipping = settings.turn === "flip" && layout.fitted;
   const layoutRef = useRef(layout);
   useLayoutEffect(() => {
     layoutRef.current = layout;
@@ -245,7 +254,8 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
     const bottom = element.scrollTop + element.clientHeight;
     let last = state.page;
     while (last < tops.length && tops[last] < bottom) last++;
-    const next: [number, number] = [Math.max(1, state.page - OVERSCAN), Math.min(tops.length, last + OVERSCAN)];
+    const overscan = settingsRef.current.turn === "flip" && layoutRef.current.fitted ? FLIP_OVERSCAN * layoutRef.current.columns : OVERSCAN;
+    const next: [number, number] = [Math.max(1, state.page - overscan), Math.min(tops.length, last + overscan)];
     setRange((current) => (current[0] === next[0] && current[1] === next[1] ? current : next));
 
     if (!restored.current) return; // don't report the pre-restore position as progress
@@ -376,19 +386,74 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
   }, []);
 
   // ------------------------------------------------------------ keyboard
-  const scrollByViewport = useCallback((direction: 1 | -1) => {
+  const scrollByViewport = useCallback((direction: FlipDirection) => {
     const element = scroller.current;
     if (!element) return;
     const smooth = !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const { tops, heights, columns, fitted } = layoutRef.current;
     if (fitted && tops.length) {
       const state = pdfViewState({ pageTops: tops, pageHeights: heights, scrollTop: element.scrollTop + PAGE_GAP, viewportHeight: element.clientHeight });
-      const index = Math.min(tops.length - 1, Math.max(0, state.page - 1 + direction * columns));
-      element.scrollTo({ top: tops[index] - PAGE_GAP, behavior: "auto" });
+      const from = Math.floor((state.page - 1) / columns) * columns;
+      const index = Math.min(tops.length - 1, Math.max(0, from + direction * columns));
+      if (index === from) return;
+      const move = () => {
+        element.scrollTo({ top: tops[index] - PAGE_GAP, behavior: "auto" });
+        report();
+      };
+      if (settingsRef.current.turn !== "flip") return move();
+      // The sheet's two faces: left/right pages of the spread before and after the turn.
+      const spread = (first: number) => {
+        const page = (n: number) => element.querySelector<HTMLElement>(`[data-page="${n + 1}"]`);
+        if (columns === 1) return { right: page(first) };
+        const left = page(first), right = page(first + 1);
+        return right ? { left, right } : { right: left };
+      };
+      void flipPage(direction, move, { before: () => spread(from), after: () => spread(index) });
       return;
     }
     element.scrollBy({ top: direction * element.clientHeight * 0.88, behavior: smooth ? "smooth" : "auto" });
-  }, []);
+  }, [report]);
+
+  // Flip mode: a wheel notch or a swipe turns the sheet instead of scrolling it.
+  useEffect(() => {
+    const element = scroller.current;
+    if (!element || !flipping) return;
+    let travel = 0;
+    let lockedUntil = 0;
+    const onWheel = (event: WheelEvent) => {
+      if (event.ctrlKey) return; // pinch-zoom gestures
+      event.preventDefault();
+      const delta = Math.abs(event.deltaY) >= Math.abs(event.deltaX) ? event.deltaY : event.deltaX;
+      const now = Date.now();
+      if (now < lockedUntil) return;
+      travel += delta;
+      if (Math.abs(travel) > 48) {
+        scrollByViewport(travel > 0 ? 1 : -1);
+        travel = 0;
+        lockedUntil = now + 520;
+      }
+    };
+    let touch: { x: number; y: number; at: number } | null = null;
+    const onDown = (event: PointerEvent) => {
+      if (event.pointerType === "touch") touch = { x: event.clientX, y: event.clientY, at: Date.now() };
+    };
+    const onUp = (event: PointerEvent) => {
+      if (!touch || event.pointerType !== "touch") return;
+      const dx = event.clientX - touch.x, dy = event.clientY - touch.y, quick = Date.now() - touch.at < 650;
+      touch = null;
+      if (!quick || !document.getSelection()?.isCollapsed) return;
+      if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy)) scrollByViewport(dx < 0 ? 1 : -1);
+      else if (Math.abs(dy) > 70) scrollByViewport(dy < 0 ? 1 : -1);
+    };
+    element.addEventListener("wheel", onWheel, { passive: false });
+    element.addEventListener("pointerdown", onDown);
+    element.addEventListener("pointerup", onUp);
+    return () => {
+      element.removeEventListener("wheel", onWheel);
+      element.removeEventListener("pointerdown", onDown);
+      element.removeEventListener("pointerup", onUp);
+    };
+  }, [flipping, scrollByViewport]);
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -456,7 +521,7 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
   if (doc) for (let page = range[0]; page <= Math.min(range[1], pageCount); page++) pages.push(page);
 
   return (
-    <div ref={scroller} className="scroll-slim h-full w-full overflow-y-auto overscroll-contain" style={{ overflowAnchor: "none", overflowX: settings.zoom <= 0.8 ? "auto" : "hidden" }} tabIndex={0} aria-label="Book pages">
+    <div ref={scroller} data-turn={flipping ? "flip" : "scroll"} className="scroll-slim h-full w-full overscroll-contain" style={{ overflowAnchor: "none", overflowY: flipping ? "hidden" : "auto", overflowX: settings.zoom <= 0.8 ? "auto" : "hidden" }} tabIndex={0} aria-label="Book pages">
       <div className="relative mx-auto" style={{ height: layout.total, width: layout.width }}>
         {doc &&
           pages.map((page) => {
@@ -472,10 +537,11 @@ export const PdfViewer = forwardRef<ViewerHandle, ViewerProps>(function PdfViewe
                   let top = y * layout.heights[page - 1];
                   if (lastTop >= 0 && top - lastTop < 40) top = lastTop + 40;
                   lastTop = top;
+                  const pinned = marker.open && (marker.kind ?? "note") !== "poll" && marker.kind !== "echo";
                   return (
                     <div key={marker.id}>
-                      {marker.open && <span data-note-pin={marker.id} className="note-pin" style={{ left: `${(anchor.x ?? anchor.rects?.[0]?.x ?? 0.5) * 100}%`, top: `${y * 100}%`, background: `oklch(0.62 0.12 ${personHue(marker.authorId)})` }} aria-hidden />}
-                      {marker.open && anchor.rects && <HighlightRects rects={anchor.rects} hue={personHue(marker.authorId)} />}
+                      {pinned && <span data-note-pin={marker.id} className="note-pin" style={{ left: `${(anchor.x ?? anchor.rects?.[0]?.x ?? 0.5) * 100}%`, top: `${y * 100}%`, background: `oklch(0.62 0.12 ${personHue(marker.authorId)})` }} aria-hidden />}
+                      {pinned && anchor.rects && <HighlightRects rects={anchor.rects} hue={personHue(marker.authorId)} />}
                       <div className="absolute right-0 z-[3] translate-x-1/3 sm:translate-x-[85%]" style={{ top: Math.min(layout.heights[page - 1] - 44, Math.max(0, top - 8)) }}>
                         {renderMarker(marker)}
                       </div>

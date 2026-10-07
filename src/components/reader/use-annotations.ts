@@ -29,6 +29,9 @@ export interface NewNote {
   files?: File[];
   attention?: import("@/lib/types").NoteAttention;
   recipientId?: string | null;
+  kind?: "note" | "package";
+  /** The label on a package's wrapping, visible before it opens. */
+  title?: string;
 }
 
 export interface UploadingState {
@@ -38,7 +41,7 @@ export interface UploadingState {
   fraction: number;
 }
 
-const MARKER_COLUMNS = "id, room_id, book_id, author_id, position, anchor, location_label, published_at, created_at, attention, recipient_id";
+const MARKER_COLUMNS = "id, room_id, book_id, author_id, position, anchor, location_label, published_at, created_at, attention, recipient_id, kind, package_title";
 
 /** Reads duration / dimensions locally so the note can show them without downloading the media. */
 async function probeMedia(file: File, kind: AttachmentKind): Promise<{ duration: number | null; width: number | null; height: number | null }> {
@@ -228,6 +231,8 @@ export function useAnnotations({ roomId, meId }: { roomId: string; meId: string 
         p_publish: files.length === 0,
         p_attention: note.attention ?? "gentle",
         p_recipient_id: note.recipientId ?? null,
+        p_kind: note.kind ?? "note",
+        p_title: note.title ?? null,
       });
       if (createError) throw new Error(friendlyError(createError));
       const markerId = data as string;

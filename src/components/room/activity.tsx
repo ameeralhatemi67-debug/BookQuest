@@ -1,4 +1,4 @@
-import { BookOpenCheck, DoorOpen, Flag, Footprints, MessageCircle, PenLine, Settings2, Sparkles, Zap } from "lucide-react";
+import { BarChart3, BookOpenCheck, DoorOpen, Flag, Footprints, MessageCircle, PartyPopper, PenLine, Settings2, Sparkles, Stamp, Zap } from "lucide-react";
 import type { ReactNode } from "react";
 import { Avatar } from "@/components/ui/avatar";
 import { cn, timeAgo } from "@/lib/format";
@@ -57,6 +57,16 @@ export function describeActivity(activity: Activity, people: Map<string, Activit
       if (changes.includes("is_closed")) return { icon: <Settings2 className={icon} aria-hidden />, text: <>{who} {activity.data.is_closed ? "closed the room to new members" : "re-opened the room to new members"}.</> };
       if (changes.includes("reopened")) return { icon: <Settings2 className={icon} aria-hidden />, text: <>{who} re-opened this room.</> };
       return { icon: <Settings2 className={icon} aria-hidden />, text: <>{who} updated the room.</> };
+    }
+    case "prediction_sealed":
+      return { icon: <Stamp className={icon} aria-hidden />, text: <>{who} sealed a prediction{typeof activity.data.label === "string" ? ` that opens at ${activity.data.label}` : ""}.</> };
+    case "poll_added":
+      return { icon: <BarChart3 className={icon} aria-hidden />, text: <>{who} left a poll{label}.</> };
+    case "ritual_started":
+      return { icon: <Sparkles className={icon} aria-hidden />, text: <>{who} started a ritual: {String(activity.data.title ?? "")}</> };
+    case "afterparty": {
+      const count = Number(activity.data.count ?? 1);
+      return { icon: <PartyPopper className={icon} aria-hidden />, text: count > 1 ? <>Everyone is through {count} more chapters. Their afterparties are open.</> : <>Everyone finished {String(activity.data.label ?? "a chapter")}. Its afterparty is open.</> };
     }
     case "room_archived":
       return { icon: <Settings2 className={icon} aria-hidden />, text: activity.data.by_admin ? <>This room was archived.</> : <>{who} archived this room.</> };
