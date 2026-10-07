@@ -8,6 +8,11 @@ Each entry says what changed for people using the app; technical notes follow wh
 
 Status: committed on `alpha-build`; not yet deployed. Hosted migration `20261007120000_emotional_multiplayer.sql` not yet applied.
 
+### Fixes from the full test run
+- Room page: Room rituals now sit below Readers and activity. Loading them a moment after the page used to push the member list down while its menu was opening.
+- Reader on phones: moment pills (just opened, predictions ready, afterparty) float above the music player instead of covering it.
+- Tests: updated for open signup, the Map and contents button, and own notes staying still.
+
 ### Logs
 - Added this changelog and the in-app **What's new** window. It opens once per new release (never in automated test browsers) and stays in the account menu, with a gold dot on the avatar while unseen.
 - README now says that both logs are always kept up to date.

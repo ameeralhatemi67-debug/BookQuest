@@ -47,7 +47,8 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
       const avatar = page.locator(`[data-note-avatar="${marker!.id}"]`);
       const pin = page.locator(`[data-note-pin="${marker!.id}"]`);
       await expect(avatar).toBeVisible(); await expect(pin).toBeVisible();
-      await expect(avatar).toHaveAttribute("data-attention","playful");
+      // Your own notes sit still; the performance is for the friend who finds them.
+      await expect(avatar).toHaveAttribute("data-attention","still");
       await avatar.click();
       const bubble = page.getByRole("dialog",{name:/Note from Attention/});
       await expect(bubble).toBeVisible();
@@ -90,7 +91,8 @@ for (const format of ["pdf", "epub"] as const) for (const touch of [false, true]
       expect((await pin.boundingBox())!.x).toBeCloseTo(beforePin.x,1);
       await page.clock.fastForward(5*60_000+100);
       await expect(avatar).toHaveAttribute("data-sleeping","false");
-      await expect(avatar).toHaveAttribute("data-attention","playful");
+      // Your own notes sit still; the performance is for the friend who finds them.
+      await expect(avatar).toHaveAttribute("data-attention","still");
       if (!touch && format === "pdf") await page.screenshot({path:".local/note-avatar-spread.png"});
       expect(errors.errors).toEqual([]);
     } finally { await context.close(); }

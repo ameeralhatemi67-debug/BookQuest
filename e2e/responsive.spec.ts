@@ -28,7 +28,7 @@ test("fits small phones, tablets, landscape phones and laptops", async () => {
     await page.waitForTimeout(250);
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
     await expect.poll(() => page.frameLocator("main iframe").locator("body").evaluate((body) => parseFloat(getComputedStyle(body).columnWidth)), { timeout: 5000 }).toBeLessThanOrEqual(width);
-    for (const name of ["Contents", "Reading settings", "Soundtrack", "Leave a note here"]) {
+    for (const name of ["Map and contents", "Reading settings", "Soundtrack", "Leave a note here"]) {
       const box = await page.getByRole("button", { name, exact: true }).boundingBox();
       expect(box!.width).toBeGreaterThanOrEqual(44); expect(box!.height).toBeGreaterThanOrEqual(44);
       expect(box!.x).toBeGreaterThanOrEqual(0); expect(box!.x + box!.width).toBeLessThanOrEqual(width);
@@ -51,10 +51,10 @@ test("settings, focus and keyboard dismissal work", async () => {
   await page.getByRole("button", { name: "Focus on the book" }).click();
   await expect(page.getByTestId("reader")).toHaveAttribute("data-focus", "true");
   await page.getByRole("button", { name: "Show reading controls" }).click();
-  await page.getByRole("button", { name: "Contents", exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Contents", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Map and contents", exact: true }).click();
+  await expect(page.getByRole("dialog", { name: "Map and contents", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
-  await expect(page.getByRole("dialog", { name: "Contents", exact: true })).toBeHidden();
+  await expect(page.getByRole("dialog", { name: "Map and contents", exact: true })).toBeHidden();
 });
 
 test("uploads, plays, pauses, hides and stops the soundtrack", async () => {

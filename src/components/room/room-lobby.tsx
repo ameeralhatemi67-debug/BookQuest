@@ -259,18 +259,6 @@ export function RoomLobby({ initial, initialExtras, welcome }: { initial: RoomDe
         )}
       </Card>
 
-      <RoomMoments
-        roomId={room.id}
-        layer={layer}
-        meId={me.user_id}
-        isStaff={isStaff}
-        myFurthest={room.my?.furthest ?? 0}
-        finished={(room.my?.furthest ?? 0) >= 0.98}
-        personOf={(id) => { const p = people.get(id); return { id, display_name: p?.display_name ?? "A former member", avatar_path: p?.avatar_path ?? null }; }}
-        onChanged={() => void refresh()}
-        archived={archived}
-      />
-
       <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
         {/* ------------------------------------------------------------ members */}
         <section aria-labelledby="members-heading">
@@ -350,6 +338,18 @@ export function RoomLobby({ initial, initialExtras, welcome }: { initial: RoomDe
           </Card>
         </section>
       </div>
+
+      <RoomMoments
+        roomId={room.id}
+        layer={layer}
+        meId={me.user_id}
+        isStaff={isStaff}
+        myFurthest={room.my?.furthest ?? 0}
+        finished={(room.my?.furthest ?? 0) >= 0.98}
+        personOf={(id) => { const p = people.get(id); return { id, display_name: p?.display_name ?? "A former member", avatar_path: p?.avatar_path ?? null }; }}
+        onChanged={() => void refresh()}
+        archived={archived}
+      />
 
       <InviteDialog room={room} open={inviteOpen} onOpenChange={setInviteOpen} onChanged={refresh} />
       <RoomSettingsDialog room={room} open={settingsOpen} onOpenChange={setSettingsOpen} onChanged={refresh} />

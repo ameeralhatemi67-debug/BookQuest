@@ -49,7 +49,7 @@ test("signs up without any code and opens a room", async () => {
   await sara.goto("/signup");
   await expect(sara.getByText("No code needed")).toBeVisible();
   await expect(sara.getByLabel("Alpha code")).toHaveCount(0);
-  saraEmail = await signUp(sara, "Sara");
+  saraEmail = await signUp(sara, "Sara Night");
   await sara.waitForURL("**/home");
   const bookId = await uploadBook(sara, "the-lighthouse.epub");
   roomId = await createRoom(sara, bookId, { name: "Lighthouse night shift", mode: "Race" });
@@ -59,7 +59,7 @@ test("signs up without any code and opens a room", async () => {
   const path = new URL(inviteUrl).pathname;
   await fahad.goto(path);
   await fahad.waitForURL(/\/login\?next=/);
-  fahadEmail = await signUp(fahad, "Fahad", { next: path });
+  fahadEmail = await signUp(fahad, "Fahad Night", { next: path });
   await fahad.waitForURL(`**${path}`);
   await fahad.getByRole("button", { name: "Join and start reading" }).click();
   await fahad.waitForURL(`**/rooms/${roomId}`);
@@ -196,7 +196,7 @@ test("the prediction opens when Fahad reaches the next chapter", async () => {
 test("the package unwraps at Chapter 4", async () => {
   test.setTimeout(120_000);
   await goToChapter(fahad, /Chapter 4 ·/);
-  const gift = fahad.getByRole("button", { name: /Open the package Sara wrapped for you/ });
+  const gift = fahad.getByRole("button", { name: /Open the package Sara Night wrapped for you/ });
   await expect(gift).toBeVisible({ timeout: 30_000 });
   await gift.click();
   const note = fahad.getByRole("dialog", { name: "Note" });

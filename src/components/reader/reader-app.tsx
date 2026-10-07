@@ -1049,7 +1049,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
 
         {/* ---------------------------------------------------------- moments */}
         {!activeNote && !composer && !activePoll && party === null && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-24 z-30 flex flex-col items-center gap-2 px-4">
+          <div className="reader-moments pointer-events-none absolute inset-x-0 z-30 flex flex-col items-center gap-2 px-4">
             {revealMarkers.length > 0 && (
               <MomentPill
                 icon={<Avatar person={personOf(revealMarkers[0].author_id)} size={30} className="animate-unlock rounded-full" />}

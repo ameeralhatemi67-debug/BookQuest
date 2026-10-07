@@ -33,11 +33,11 @@ describe("backend integration (auth · data API · storage · realtime)", () => 
       expect(await rpc(amir, "my_access")).toMatchObject({ status: "active", display_name: "Amir", is_admin: false });
     });
 
-    it("leaves a tester without a code pending", async () => {
-      const pending = await signUp(backend, "Pending", null);
-      expect(await rpc(pending, "my_access")).toMatchObject({ status: "pending" });
-      await expect(rpc(pending, "my_home")).rejects.toThrow("alpha_access_required");
-      expect(await rpc(pending, "redeem_alpha_code", { p_code: "LOCAL-ALPHA" })).toMatchObject({ status: "active" });
+    it("lets a reader in without any code while seats remain", async () => {
+      // Waiting for a seat once the alpha is full is covered by tests/db/access.test.ts.
+      const reader = await signUp(backend, "Codeless", null);
+      expect(await rpc(reader, "my_access")).toMatchObject({ status: "active" });
+      await expect(rpc(reader, "my_home")).resolves.toBeTruthy();
     });
 
     it("signs in again with the password and rejects a wrong one", async () => {

@@ -75,7 +75,8 @@ test("navigates by keyboard and tracks page and progress", async () => {
   expect(progress).toBeLessThan(0.4);
 
   // The contents panel is honest when a PDF has no outline.
-  await page.getByRole("button", { name: "Contents" }).click();
+  await page.getByRole("button", { name: "Map and contents" }).click();
+  await page.getByRole("tab", { name: "Contents" }).click();
   await expect(page.getByText("This book doesn't include a table of contents.")).toBeVisible();
   await page.keyboard.press("Escape");
 });

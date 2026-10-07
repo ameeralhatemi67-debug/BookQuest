@@ -419,3 +419,6 @@ button:not(:disabled), a { touch-action: manipulation; }
 .reading-desk::before { content: ""; position: absolute; inset: auto -10% -40% -10%; height: 70%; background: radial-gradient(50% 50% at 30% 50%, color-mix(in oklab, var(--accent) 9%, transparent), transparent 70%); pointer-events: none; }
 .desk-book::after { content: ""; position: absolute; left: 8%; right: -6%; bottom: -14px; height: 22px; border-radius: 50%; background: rgb(var(--shadow-color) / .22); filter: blur(10px); z-index: -1; }
 .desk-book-pages { position: absolute; inset: 6px -7px 4px 12px; border-radius: 3px 6px 6px 3px; transform: rotate(-1.5deg); background: repeating-linear-gradient(180deg, var(--raised) 0 2px, var(--line) 2px 3px); box-shadow: 0 2px 6px rgb(var(--shadow-color) / .12); }
+/* Moment pills (just opened, predictions ready, afterparty) float above the phone music player. */
+.reader-moments { bottom: 96px; }
+@media (max-width: 695px) { .reader-moments { bottom: calc(148px + env(safe-area-inset-bottom)); } }
