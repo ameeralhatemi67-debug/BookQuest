@@ -121,7 +121,7 @@ export default async function HomePage() {
         </EmptyState>
       )}
 
-      <div className="grid gap-12 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid grid-cols-1 gap-12 lg:grid-cols-[minmax(0,1fr)_320px]">
         <div className="min-w-0 space-y-12">
           <section aria-labelledby="rooms-heading">
             <SectionHeading
@@ -136,7 +136,7 @@ export default async function HomePage() {
               }
             />
             {others.length > 0 ? (
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {others.map((room) => (
                   <RoomCardView key={room.id} room={room} />
                 ))}
@@ -160,7 +160,7 @@ export default async function HomePage() {
                   </Link>
                 }
               />
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {openRooms.map((room) => (
                   <OpenRoomCard key={room.id} room={room} action={<Link href={`/rooms/${room.id}`} className={buttonClass("secondary", "sm")}>Take a look</Link>} />
                 ))}
@@ -171,7 +171,7 @@ export default async function HomePage() {
           {archived.length > 0 && (
             <section aria-labelledby="archived-heading">
               <SectionHeading id="archived-heading" title="Journeys" hint="Rooms that have ended, kept as a memory." />
-              <div className="grid gap-4 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {archived.map((room) => (
                   <RoomCardView key={room.id} room={room} />
                 ))}

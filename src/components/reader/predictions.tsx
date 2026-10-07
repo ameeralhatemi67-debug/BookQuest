@@ -208,7 +208,7 @@ export function PredictionsPanel({ predictions, personOf, meId, hueOf, onChanged
       {opened.length > 0 && (
         <section aria-labelledby="opened-heading">
           <h3 id="opened-heading" className="mb-3 font-display text-lg text-ink">Opened</h3>
-          <ol className="grid gap-3">
+          <ol className="grid grid-cols-1 gap-3">
             {opened.map((p, i) => {
               const author = personOf(p.author_id);
               return (

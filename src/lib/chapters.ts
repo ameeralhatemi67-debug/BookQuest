@@ -9,6 +9,8 @@ export interface Chapter {
   label: string;
   start: number;
   end: number;
+  /** Equal tenths standing in for a book without a usable outline. */
+  synthetic?: boolean;
 }
 
 export function chaptersFrom(outline: OutlineEntry[] | null | undefined): Chapter[] {
@@ -16,7 +18,7 @@ export function chaptersFrom(outline: OutlineEntry[] | null | undefined): Chapte
   const unique: OutlineEntry[] = [];
   for (const entry of tops) if (!unique.length || Math.abs(entry.start - unique[unique.length - 1].start) > 0.0001) unique.push(entry);
   if (unique.length < 2) {
-    return Array.from({ length: 10 }, (_, i) => ({ index: i, label: `${i * 10}–${(i + 1) * 10}%`, start: i / 10, end: (i + 1) / 10 }));
+    return Array.from({ length: 10 }, (_, i) => ({ index: i, label: `${i * 10}–${(i + 1) * 10}%`, start: i / 10, end: (i + 1) / 10, synthetic: true }));
   }
   return unique.map((entry, i) => ({ index: i, label: entry.label || `Part ${i + 1}`, start: entry.start, end: unique[i + 1]?.start ?? 1 }));
 }

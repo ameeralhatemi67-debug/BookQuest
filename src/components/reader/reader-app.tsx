@@ -808,6 +808,7 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
   const progressNow = location?.reach ?? initialRoom.my?.furthest ?? 0;
   const theme = settings.theme;
   const atEnd = furthest >= 0.98 || Boolean(initialRoom.my?.completed_at);
+  const mapSwitch = <Tabs label="Map or contents" value={mapTab} onChange={setMapTab} tabs={[{ id: "map", label: "Map" }, { id: "contents", label: "Contents" }]} />;
 
   return (
     <PortalContainerContext.Provider value={root}>
@@ -1118,11 +1119,6 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
         {/* ---------------------------------------------------------- map and contents */}
         <Sheet open={panel === "map"} onOpenChange={(open) => !open && setPanel(null)}>
           <SheetContent title={on("book_map") ? "Map and contents" : "Contents"} className={on("book_map") ? "sm:w-[min(560px,96vw)]" : undefined}>
-            {on("book_map") && (
-              <div className="border-b border-line px-5 pb-3 pt-3">
-                <Tabs label="Map or contents" value={mapTab} onChange={setMapTab} tabs={[{ id: "map", label: "Map" }, { id: "contents", label: "Contents" }]} />
-              </div>
-            )}
             {on("book_map") && mapTab === "map" ? (
               <BookMap
                 chapters={chapters}
@@ -1142,12 +1138,14 @@ export function ReaderApp({ room: initialRoom, book }: { room: RoomDetail; book:
                   void viewer.current?.goToProgress(position);
                 }}
                 onAfterparty={showAfterparty}
+                switcher={mapSwitch}
               />
             ) : (
               <>
-                <header className="flex items-center justify-between border-b border-line px-5 py-4">
-                  <h2 className="font-display text-xl text-ink">Contents</h2>
-                  <SheetClose className="flex size-10 items-center justify-center rounded-full text-ink-faint hover:bg-sunk hover:text-ink" aria-label="Close">
+                <header className="flex items-center gap-2 border-b border-line px-4 py-3 sm:px-5 sm:py-4">
+                  <h2 className={cn("font-display text-xl text-ink", on("book_map") ? "sr-only" : "min-w-0 flex-1")}>Contents</h2>
+                  {on("book_map") && <div className="min-w-0 flex-1">{mapSwitch}</div>}
+                  <SheetClose className="-mr-1.5 flex size-10 shrink-0 items-center justify-center rounded-full text-ink-faint hover:bg-sunk hover:text-ink" aria-label="Close">
                     <span aria-hidden className="text-xl leading-none">×</span>
                   </SheetClose>
                 </header>

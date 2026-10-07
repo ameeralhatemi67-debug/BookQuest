@@ -4,6 +4,15 @@ Every feature, change and fix goes here, newest first, under the date the work w
 
 Each entry says what changed for people using the app; technical notes follow where they matter. "Deployed" means it reached https://book-quest-ecru.vercel.app/.
 
+## 2026-10-07 · Phone hotfixes
+
+Not in the What's new window (fixes only).
+
+- Home on phones no longer zooms out or scrolls sideways. On phones, Home's grids had no explicit column, so a long single-line title (such as a long Arabic room name) stretched the column, and with it the whole page, past the screen. The Home, reading-desk, predictions and vault grids now hold their single column to the screen width.
+- Room and book titles use automatic text direction, so Arabic titles read right to left and truncate on the correct side. Very long unbreakable room names wrap on the reading desk instead of being clipped.
+- Book map on phones, decluttered: the Map/Contents switch, a key button and close share one header row (the repeated "The map" heading is now screen-reader only); a one-line summary; avatar-only friend chips with the chosen friend's name; the key and the footer note move behind the ⓘ button; tighter rows. Books without chapters (like PDFs without an outline) drop the redundant row numbers, say "You're 3% in", and keep reader avatars inside each rail.
+- New regression test: `e2e/phone-layout.spec.ts` (Home width with long titles, map, key and contents at 390 px).
+
 ## 2026-10-07 · Emotional multiplayer reading
 
 Status: deployed 2026-10-07. Hosted migration `20261007182115_emotional_multiplayer.sql` applied and verified (every function definition matches the repo).

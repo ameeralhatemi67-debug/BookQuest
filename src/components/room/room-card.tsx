@@ -91,15 +91,15 @@ export function ReadingDesk({ room, away, outline }: { room: RoomCard; away?: Aw
 
   return (
     <section aria-labelledby="desk-title" className="reading-desk relative overflow-hidden rounded-[2rem] px-5 py-8 sm:px-10 sm:py-12">
-      <div className="relative grid items-center gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-14">
+      <div className="relative grid grid-cols-1 items-center gap-8 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)] lg:gap-14">
         <Link href={`/read/${room.id}`} className="desk-book group relative mx-auto block w-fit" aria-label={`Open ${room.book.title}`} tabIndex={-1}>
           <span className="desk-book-pages" aria-hidden />
           <BookCover book={room.book} width={208} priority className="relative rotate-[-2.5deg] transition-transform duration-500 ease-[cubic-bezier(0.16,1,0.3,1)] group-hover:-translate-y-1.5 group-hover:rotate-[-1deg]" />
         </Link>
 
         <div className="min-w-0">
-          <h1 id="desk-title" className="font-display text-4xl leading-[1.05] text-ink sm:text-6xl">{room.book.title}</h1>
-          <p className="mt-2 text-sm text-ink-soft">
+          <h1 id="desk-title" dir="auto" className="font-display text-4xl leading-[1.05] text-ink sm:text-6xl">{room.book.title}</h1>
+          <p className="mt-2 text-sm text-ink-soft [overflow-wrap:anywhere]">
             {room.book.author ? `${room.book.author} · ` : ""}
             <Link href={`/rooms/${room.id}`} className="underline-offset-4 hover:underline">{room.name}</Link>
           </p>
@@ -176,12 +176,12 @@ export function RoomCardView({ room }: { room: RoomCard }) {
     <article className="group relative flex gap-4 rounded-3xl border border-line bg-raised p-4 shadow-soft transition-shadow hover:shadow-lift">
       <BookCover book={room.book} width={72} />
       <div className="flex min-w-0 flex-1 flex-col">
-        <h3 className="truncate font-display text-xl leading-tight text-ink">
+        <h3 dir="auto" className="truncate font-display text-xl leading-tight text-ink">
           <Link href={`/rooms/${room.id}`} className="after:absolute after:inset-0 after:rounded-3xl">
             {room.name}
           </Link>
         </h3>
-        <p className="truncate text-sm text-ink-soft">{room.book.title}</p>
+        <p dir="auto" className="truncate text-sm text-ink-soft">{room.book.title}</p>
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           <Badge>{mode.name}</Badge>
           <VisibilityBadge visibility={room.visibility} />
@@ -213,7 +213,7 @@ export function OpenRoomCard({ room, action }: { room: RoomPreview; action?: Rea
       <div className="flex gap-4">
         <BookCover book={room.book} width={76} />
         <div className="min-w-0 flex-1">
-          <h3 className="font-display text-xl leading-tight text-ink">{room.name}</h3>
+          <h3 dir="auto" className="font-display text-xl leading-tight text-ink">{room.name}</h3>
           <p className="truncate text-sm text-ink-soft">
             {room.book.title}
             {room.book.author ? ` · ${room.book.author}` : ""}

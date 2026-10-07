@@ -288,7 +288,7 @@ export function VaultView({ vault }: { vault: Vault }) {
         {(vault.first_note || vault.most_reacted || vault.funniest) && (
           <section aria-label="Moments" className="grid gap-4 lg:grid-cols-5" style={rise()}>
             {vault.first_note && <div className="lg:col-span-3"><MomentQuote title="The first thing anyone left" note={vault.first_note} personOf={personOf} large /></div>}
-            <div className="grid gap-4 lg:col-span-2">
+            <div className="grid grid-cols-1 gap-4 lg:col-span-2">
               {vault.most_reacted && <MomentQuote title="The moment everyone reacted to" note={vault.most_reacted} personOf={personOf} />}
               {vault.funniest && vault.funniest.marker_id !== vault.most_reacted?.marker_id && <MomentQuote title="The one that made you laugh" note={vault.funniest} personOf={personOf} />}
             </div>
