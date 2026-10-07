@@ -2,7 +2,7 @@
 
 BookQuest, currently titled **Marginalia** in the app, lets friends read one EPUB or PDF at their own pace. Notes, reactions and media open only when a reader reaches their place in the book. Private rooms, progress, presence and a shared soundtrack make the book the meeting place.
 
-Production: https://book-quest-ecru.vercel.app/ — invitation-only alpha.
+Production: https://book-quest-ecru.vercel.app/. Open alpha for the first 75 readers, no code needed.
 
 ## Run locally
 
@@ -11,9 +11,18 @@ npm ci
 npm run dev:local
 ```
 
-Open http://localhost:3000. Use `LOCAL-ALPHA` when signing up. The local backend runs at `127.0.0.1:56421`, requires no Docker, and keeps its database and uploads in `.local/emulator`. `admin@local.test` becomes a local admin when registered. These are local credentials only.
+Open http://localhost:3000 and sign up; no code is needed (the local emulator has no seat limit). The local backend runs at `127.0.0.1:56421`, requires no Docker, and keeps its database and uploads in `.local/emulator`. `admin@local.test` becomes a local admin when registered. These are local credentials only.
 
 For hosted development, copy `.env.example` to `.env.local`, fill in the public Supabase values, and run `npm run dev`. Never put a secret or service-role key in this app.
+
+## Keeping the logs
+
+This is a standing rule for every change, whoever makes it. Nobody needs to ask for it.
+
+1. **CHANGELOG.md gets every change.** Each feature, change or fix, however small, is added under the date the work was done (newest first), written as what changed for people using the app, with technical notes where they matter. Mark whether it is deployed.
+2. **The in-app What's new window gets noteworthy releases.** When a batch of work adds several important or noteworthy features, add a release at the top of `WHATS_NEW` in `src/lib/whats-new.ts` with a new `id`. A new id makes the window open once for every reader; it is always reachable from the account menu. Write one plain line per feature, for readers rather than developers.
+
+Update both logs in the same commit as the work.
 
 ## Use the soundtrack
 

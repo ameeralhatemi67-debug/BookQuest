@@ -1,12 +1,13 @@
 "use client";
 
-import { Bell, Compass, Home, Library, LogOut, Monitor, Moon, Search, ShieldCheck, Sun, UserRound } from "lucide-react";
+import { Bell, Compass, Gift, Home, Library, LogOut, Monitor, Moon, Search, ShieldCheck, Sun, UserRound } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useSyncExternalStore, type ReactNode } from "react";
+import { useState, useSyncExternalStore, type ReactNode } from "react";
 import { FeedbackFab } from "@/components/app/feedback";
 import { NotificationBell, useNotifications } from "@/components/app/notifications";
 import { useMe } from "@/components/app/providers";
+import { useWhatsNewUnseen, WhatsNewDialog } from "@/components/app/whats-new";
 import { Logo } from "@/components/brand/logo";
 import { Avatar } from "@/components/ui/avatar";
 import { Menu, MenuContent, MenuItem, MenuLabel, MenuSeparator, MenuTrigger } from "@/components/ui/overlay";
@@ -73,8 +74,9 @@ function isActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-function UserMenu() {
+function UserMenu({ onWhatsNew }: { onWhatsNew: () => void }) {
   const me = useMe();
+  const unseen = useWhatsNewUnseen();
   const router = useRouter();
   const [theme, setTheme] = useTheme();
   const themes: { id: Theme; label: string; icon: typeof Sun }[] = [
@@ -84,8 +86,9 @@ function UserMenu() {
   ];
   return (
     <Menu>
-      <MenuTrigger className="rounded-full" aria-label="Account menu">
+      <MenuTrigger className="relative rounded-full" aria-label={unseen ? "Account menu (something new)" : "Account menu"}>
         <Avatar person={{ id: me.user_id, display_name: me.display_name, avatar_path: me.avatar_path }} size={36} />
+        {unseen && <span className="absolute -right-0.5 -top-0.5 size-3 rounded-full bg-gold ring-2 ring-paper" aria-hidden />}
       </MenuTrigger>
       <MenuContent align="end">
         <div className="px-3 pb-2 pt-2">
@@ -97,6 +100,10 @@ function UserMenu() {
           <Link href="/profile">
             <UserRound className="size-4 text-ink-faint" aria-hidden /> Profile
           </Link>
+        </MenuItem>
+        <MenuItem onSelect={onWhatsNew}>
+          <Gift className="size-4 text-ink-faint" aria-hidden /> What&apos;s new
+          {unseen && <span className="ml-auto size-2 rounded-full bg-gold" aria-label="New" />}
         </MenuItem>
         {me.is_admin && (
           <MenuItem asChild>
@@ -143,6 +150,7 @@ function UserMenu() {
 export function AppShell({ children }: { children: ReactNode }) {
   const pathname = usePathname();
   const { unread } = useNotifications();
+  const [whatsNew, setWhatsNew] = useState(false);
 
   return (
     <div className="flex min-h-dvh flex-col">
@@ -174,7 +182,7 @@ export function AppShell({ children }: { children: ReactNode }) {
             </Link>
             <NotificationBell />
             <div className="ml-1.5">
-              <UserMenu />
+              <UserMenu onWhatsNew={() => setWhatsNew(true)} />
             </div>
           </div>
         </div>
@@ -206,6 +214,7 @@ export function AppShell({ children }: { children: ReactNode }) {
       </nav>
 
       <FeedbackFab />
+      <WhatsNewDialog open={whatsNew} onOpenChange={setWhatsNew} />
     </div>
   );
 }
