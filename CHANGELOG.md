@@ -6,7 +6,7 @@ Each entry says what changed for people using the app; technical notes follow wh
 
 ## 2026-10-07 · Emotional multiplayer reading
 
-Status: committed on `alpha-build`; not yet deployed. Hosted migration `20261007120000_emotional_multiplayer.sql` not yet applied.
+Status: deployed 2026-10-07. Hosted migration `20261007182115_emotional_multiplayer.sql` applied and verified (every function definition matches the repo).
 
 ### Fixes from the full test run
 - Room page: Room rituals now sit below Readers and activity. Loading them a moment after the page used to push the member list down while its menu was opening.
@@ -70,7 +70,7 @@ Status: committed on `alpha-build`; not yet deployed. Hosted migration `20261007
 - Home opens on a **reading desk**: the current book large, your place, everyone's progress, packages and things waiting, ready predictions, the away story and one Continue reading button. Rooms, discovery, activity and books sit below as supporting material.
 
 ### Technical
-- One additive migration: `app_settings`, `rooms.features`, `books.outline`, predictions, polls, rituals, ratings, afterparties, progress snapshots and visits, read models `room_layer`, `room_away`, `reading_echoes` and `room_vault`, and an updated `create_annotation`.
+- One additive migration (`20261007182115_emotional_multiplayer.sql`): `app_settings`, `rooms.features`, `books.outline`, predictions, polls, rituals, ratings, afterparties, progress snapshots and visits, read models `room_layer`, `room_away`, `reading_echoes` and `room_vault`, and an updated `create_annotation`.
 - New tables have no client grants; reads go through spoiler-stripping read models. Freshness comes from room activity plus Broadcast hints on the room channel. The emulator now relays Broadcast.
 - Tests: 11 new database tests (each spoiler gate, seats, features, afterparties, rituals, away summary, vault, echoes), rewritten access tests, a two-reader showcase browser spec (`e2e/multiplayer.spec.ts`) and a motion-capture probe (`MOTION_CAPTURE=1`).
 
