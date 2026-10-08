@@ -65,7 +65,7 @@ export function roomMode(id: string | null | undefined): RoomMode {
 export const VISIBILITY_INFO: Record<RoomVisibility, { name: string; description: string }> = {
   private: { name: "Private", description: "Invitation only. Never listed; only people you invite can join." },
   unlisted: { name: "Unlisted", description: "Not listed anywhere. Any alpha tester with the room link can join." },
-  open: { name: "Open", description: "Listed in Open Rooms. Any alpha tester can join." },
+  open: { name: "Open", description: "Public. Listed in Open Rooms, and any alpha tester can join." },
 };
 
 /** Default cap for any room in this alpha (mirrors private.room_capacity in SQL). */

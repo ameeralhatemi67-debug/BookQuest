@@ -1,20 +1,14 @@
 "use client";
 
-import {
-  BarChart3, BookOpen, CloudSun, DoorOpen, Eye, Gift, History, Hourglass, Lamp, Map as MapIcon, Megaphone, Music2, PartyPopper,
-  PenLine, Rows3, Sparkles, Stamp, Users, Vault, BookOpenText, Pencil, type LucideIcon,
-} from "lucide-react";
+import { Share2 } from "lucide-react";
 import { useState, useSyncExternalStore } from "react";
+import { toast } from "sonner";
+import { ReleaseItems } from "@/components/app/whats-new-items";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent } from "@/components/ui/overlay";
+import { APP_NAME, siteUrl } from "@/lib/config";
 import { formatDate } from "@/lib/format";
-import { LATEST_RELEASE, WHATS_NEW, type WhatsNewIcon, type WhatsNewRelease } from "@/lib/whats-new";
-
-const ICONS: Record<WhatsNewIcon, LucideIcon> = {
-  flip: BookOpenText, attention: Megaphone, prediction: Stamp, poll: BarChart3, package: Gift, map: MapIcon, lens: Eye,
-  party: PartyPopper, live: Users, ritual: Hourglass, vault: Vault, away: History, weather: CloudSun, echo: Sparkles,
-  desk: Lamp, seats: DoorOpen, note: PenLine, music: Music2, rail: Rows3, draw: Pencil, book: BookOpen,
-};
+import { LATEST_RELEASE, WHATS_NEW, whatsNewShare } from "@/lib/whats-new";
 
 // Which release this browser has already been shown (a per-device convenience).
 const SEEN_KEY = "marginalia:whats-new-seen";
@@ -56,25 +50,28 @@ export function useWhatsNewUnseen(): boolean {
   return seen !== LATEST_RELEASE.id;
 }
 
-function ReleaseItems({ release }: { release: WhatsNewRelease }) {
-  return (
-    <ul className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
-      {release.items.map((item) => {
-        const Icon = ICONS[item.icon];
-        return (
-          <li key={item.title} className="flex gap-3">
-            <span className="mt-0.5 grid size-9 shrink-0 place-items-center rounded-full bg-accent-soft text-accent-ink">
-              <Icon className="size-4" aria-hidden />
-            </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-medium text-ink">{item.title}</span>
-              <span className="block text-sm leading-snug text-ink-soft">{item.body}</span>
-            </span>
-          </li>
-        );
-      })}
-    </ul>
-  );
+/**
+ * Sends the latest release to a friend: the device's share sheet when it has
+ * one, otherwise the clipboard. The link opens a public page, so the friend
+ * does not need an account to see what is new.
+ */
+async function shareLatest() {
+  const message = whatsNewShare(LATEST_RELEASE, APP_NAME, siteUrl());
+  if (typeof navigator.share === "function" && (!navigator.canShare || navigator.canShare(message))) {
+    try {
+      await navigator.share(message);
+      return;
+    } catch (error) {
+      // Closing the share sheet is a choice, not a failure.
+      if (error instanceof DOMException && error.name === "AbortError") return;
+    }
+  }
+  try {
+    await navigator.clipboard.writeText(`${message.title}\n\n${message.text}\n\n${message.url}`);
+    toast.success("Copied. Paste it to a friend.");
+  } catch {
+    toast.message("Copy this link to share it", { description: message.url });
+  }
 }
 
 /**
@@ -118,7 +115,10 @@ export function WhatsNewDialog({ open, onOpenChange }: { open: boolean; onOpenCh
             </div>
           </details>
         )}
-        <div className="mt-8 flex justify-end">
+        <div className="mt-8 flex flex-wrap justify-end gap-2">
+          <Button variant="secondary" onClick={() => void shareLatest()} icon={<Share2 className="size-4" aria-hidden />}>
+            Share
+          </Button>
           <Button onClick={close}>Start reading</Button>
         </div>
       </DialogContent>

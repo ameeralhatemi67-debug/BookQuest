@@ -4,6 +4,26 @@ Every feature, change and fix goes here, newest first, under the date the work w
 
 Each entry says what changed for people using the app; technical notes follow where they matter. "Deployed" means it reached https://book-quest-ecru.vercel.app/.
 
+## 2026-10-08 · Room privacy switch and shareable What's new
+
+Status: released 2026-10-08. No database migration. Listed in the What's new window as "Your room, your doors" (new release id, so it opens once for every reader).
+
+### Switch a room between private and public
+- Room settings now opens with **Who can join**: Private, Unlisted or Public (the existing "Open"). It takes effect at once and does not wait for Save changes. Only the room's owner sees it; moderators and members are told only the owner can change how the room works.
+- Going public asks first ("The room will appear in Open Rooms and any alpha tester can join it"), going unlisted asks too, and going private happens immediately because it is easy to undo.
+- Readers already inside stay when a room goes private. Newcomers can no longer join from Open Rooms or with the room link, and notes stay locked for anyone who has not reached them.
+- Going private also retires the room link (it calls the existing `rotate_join_code`), so an old copy cannot come back to life if the room is opened up again later.
+- A Private Duo is always private: the other choices are disabled and say why.
+- Everyone in the room gets a notification ("… is now public"), and the room's activity reads "Olga made the room public". The Open badge and option description now say "Public".
+- "Creator" means the room's owner. If the owner hands the room to someone else (member menu, Make owner), the new owner gets the switch and the old one loses it.
+- Technical: no new SQL. `update_room` already refused anyone but the owner and already coerced Duo rooms to private; this adds the dedicated control and tests for it. The old visibility radio is no longer inside the settings form (it is still on New room), so saving the form can no longer overwrite a switch made a moment earlier.
+
+### Share What's new
+- The What's new window has a **Share** button. On phones and browsers with a share sheet it opens it with a short message (the release summary and its first few features) plus a link. Elsewhere it copies the same message and link to the clipboard.
+- The link opens a new public page, `/whats-new`, readable without an account, with the latest release, earlier updates and Join / Sign in buttons. Chat apps show a preview card (generated image and Open Graph tags).
+- Technical: `/whats-new` is added to the proxy's public paths (the preview image lives under it). The feature list component is shared between the window and the page (`whats-new-items.tsx`).
+- Tests: 6 new database tests (switching, who may, what newcomers can reach, Duo, ownership transfer), 3 unit tests for the share message, 7 browser cases in `e2e/room-privacy-and-sharing.spec.ts`.
+
 ## 2026-10-07 · Phone hotfixes
 
 Not in the What's new window (fixes only).

@@ -22,13 +22,13 @@ const MODE_ICON: Record<RoomModeId, ReactNode> = {
   duo: <Heart className="size-5" aria-hidden />,
 };
 
-const VISIBILITY_ICON: Record<RoomVisibility, ReactNode> = {
+export const VISIBILITY_ICON: Record<RoomVisibility, ReactNode> = {
   private: <Lock className="size-4" aria-hidden />,
   unlisted: <Link2 className="size-4" aria-hidden />,
   open: <Globe2 className="size-4" aria-hidden />,
 };
 
-function Choice({ checked, onSelect, disabled, children, className }: { checked: boolean; onSelect: () => void; disabled?: boolean; children: ReactNode; className?: string }) {
+export function Choice({ checked, onSelect, disabled, children, className }: { checked: boolean; onSelect: () => void; disabled?: boolean; children: ReactNode; className?: string }) {
   return (
     <button
       type="button"
@@ -58,12 +58,15 @@ export function RoomSettingsFields({
   onChange,
   memberCount = 1,
   showIdentity = true,
+  showVisibility = true,
 }: {
   value: RoomSettings;
   onChange: (next: RoomSettings) => void;
   /** Current number of members (settings): options that would not fit them are disabled. */
   memberCount?: number;
   showIdentity?: boolean;
+  /** Room settings change who can join with their own, immediate control instead. */
+  showVisibility?: boolean;
 }) {
   const mode = roomMode(value.mode);
   const set = (patch: Partial<RoomSettings>) => onChange({ ...value, ...patch });
@@ -108,6 +111,7 @@ export function RoomSettingsFields({
         <p className="mt-2 text-sm leading-relaxed text-ink-soft">{mode.description}</p>
       </fieldset>
 
+      {showVisibility && (
       <fieldset>
         <legend className="text-sm font-medium text-ink">Who can join?</legend>
         <div role="radiogroup" aria-label="Room visibility" className="mt-2 grid gap-2">
@@ -127,6 +131,7 @@ export function RoomSettingsFields({
           })}
         </div>
       </fieldset>
+      )}
 
       {!mode.fixedSize && (
         <Field label="Member limit" hint={`Optional. Leave empty for up to ${MAX_ROOM_SIZE} readers. Small groups tend to feel best.`}>

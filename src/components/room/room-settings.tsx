@@ -5,13 +5,14 @@ import { useRouter } from "next/navigation";
 import { useState, type FormEvent } from "react";
 import { toast } from "sonner";
 import { FeatureToggles } from "@/components/room/feature-toggles";
-import { parseMemberLimit, RoomSettingsFields, type RoomSettings } from "@/components/room/room-form";
+import { Choice, parseMemberLimit, RoomSettingsFields, VISIBILITY_ICON, type RoomSettings } from "@/components/room/room-form";
 import { Button } from "@/components/ui/button";
 import { FormError } from "@/components/ui/field";
 import { Dialog, DialogContent } from "@/components/ui/overlay";
 import { friendlyError } from "@/lib/errors";
+import { roomMode, VISIBILITY_INFO } from "@/lib/room-modes";
 import { getSupabase } from "@/lib/supabase/client";
-import type { RoomDetail } from "@/lib/types";
+import type { RoomDetail, RoomVisibility } from "@/lib/types";
 
 function settingsOf(room: RoomDetail): RoomSettings {
   return {
@@ -34,6 +35,26 @@ export function RoomSettingsDialog({ room, open, onOpenChange, onChanged }: { ro
   );
 }
 
+// How far a setting opens the room to people who were not invited.
+const REACH: Record<RoomVisibility, number> = { private: 0, unlisted: 1, open: 2 };
+
+const VISIBILITY_CHOICES: { id: RoomVisibility; label: string; hint: string }[] = [
+  { id: "private", label: "Private", hint: "Invited friends only." },
+  { id: "unlisted", label: "Unlisted", hint: "Anyone with the room link." },
+  { id: "open", label: "Public", hint: "Listed in Open Rooms for everyone." },
+];
+
+const NOW_TEXT: Record<RoomVisibility, string> = {
+  private: "This room is now private. It is out of Open Rooms and its link has stopped working.",
+  unlisted: "This room is now unlisted. Anyone with its link can join, but it is not listed.",
+  open: "This room is now public and appears in Open Rooms.",
+};
+
+const WIDEN_TEXT: Record<Exclude<RoomVisibility, "private">, string> = {
+  unlisted: "Anyone who has the room link will be able to join. The room stays out of Open Rooms.",
+  open: "The room will appear in Open Rooms and any alpha tester can join it.",
+};
+
 function SettingsBody({ room, onClose, onChanged }: { room: RoomDetail; onClose: () => void; onChanged: () => void }) {
   const router = useRouter();
   const supabase = getSupabase();
@@ -44,6 +65,8 @@ function SettingsBody({ room, onClose, onChanged }: { room: RoomDetail; onClose:
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<"leave" | "archive" | null>(null);
+  const [widen, setWiden] = useState<Exclude<RoomVisibility, "private"> | null>(null);
+  const allowed = roomMode(room.mode).visibility;
 
   async function run(key: string, action: () => PromiseLike<{ error: unknown }>, after?: () => void) {
     setBusy(key);
@@ -53,6 +76,33 @@ function SettingsBody({ room, onClose, onChanged }: { room: RoomDetail; onClose:
     if (rpcError) return setError(friendlyError(rpcError));
     after?.();
     onChanged();
+  }
+
+  // Takes effect at once, apart from the form below: who can join is not a draft.
+  function applyVisibility(next: RoomVisibility) {
+    void run(
+      "visibility",
+      async () => {
+        const result = await supabase.rpc("update_room", { p_room_id: room.id, p_visibility: next });
+        if (!result.error && next === "private") {
+          // Retire the room link, so an old copy cannot come back to life if the room is opened up again.
+          await supabase.rpc("rotate_join_code", { p_room_id: room.id });
+        }
+        return result;
+      },
+      () => {
+        setWiden(null);
+        toast.success(NOW_TEXT[next]);
+      },
+    );
+  }
+
+  function pickVisibility(next: RoomVisibility) {
+    if (next === room.visibility) return;
+    // Opening a room up asks first; closing it down is easy to undo, so it just happens.
+    if (next !== "private" && REACH[next] > REACH[room.visibility]) return setWiden(next);
+    setWiden(null);
+    applyVisibility(next);
   }
 
   async function save(event: FormEvent) {
@@ -65,7 +115,6 @@ function SettingsBody({ room, onClose, onChanged }: { room: RoomDetail; onClose:
           p_room_id: room.id,
           p_name: settings.name.trim(),
           p_description: settings.description.trim(),
-          p_visibility: settings.visibility,
           p_mode: settings.mode,
           p_member_limit: settings.mode === "duo" ? 2 : limit,
           p_clear_member_limit: settings.mode !== "duo" && limit === null,
@@ -82,8 +131,55 @@ function SettingsBody({ room, onClose, onChanged }: { room: RoomDetail; onClose:
           <FormError>{error}</FormError>
 
           {isOwner && !archived && (
+            <section aria-labelledby="room-privacy-heading" className="space-y-3">
+              <div>
+                <h3 id="room-privacy-heading" className="font-display text-lg text-ink">Who can join</h3>
+                <p className="text-sm text-ink-soft">
+                  Only you, as the owner, can change this. It applies straight away. Readers already in the room stay, and notes stay locked for newcomers until they reach them.
+                </p>
+              </div>
+              <div role="radiogroup" aria-label="Room privacy" className="grid gap-2 sm:grid-cols-3">
+                {VISIBILITY_CHOICES.map(({ id, label, hint }) => (
+                  <Choice
+                    key={id}
+                    checked={room.visibility === id}
+                    disabled={busy === "visibility" || !allowed.includes(id)}
+                    onSelect={() => pickVisibility(id)}
+                    className="py-3"
+                  >
+                    <span className="flex items-center gap-2 font-medium text-ink">
+                      <span className="text-ink-faint">{VISIBILITY_ICON[id]}</span>
+                      {label}
+                    </span>
+                    <span className="mt-0.5 block pr-6 text-sm leading-snug text-ink-soft">{hint}</span>
+                  </Choice>
+                ))}
+              </div>
+              {allowed.length === 1 ? (
+                <p className="text-sm text-ink-soft">A Private Duo is always private. Switch the mode below to change that.</p>
+              ) : (
+                <p className="text-sm text-ink-soft">{VISIBILITY_INFO[room.visibility].description}</p>
+              )}
+              {widen && (
+                <div role="alert" className="rounded-2xl border border-line-strong bg-sunk/60 p-4">
+                  <p className="text-sm font-medium text-ink">{widen === "open" ? "Make this room public?" : "Make this room unlisted?"}</p>
+                  <p className="mt-1 text-sm text-ink-soft">{WIDEN_TEXT[widen]}</p>
+                  <div className="mt-3 flex justify-end gap-2">
+                    <Button variant="ghost" size="sm" onClick={() => setWiden(null)}>
+                      Keep it {room.visibility === "private" ? "private" : "as it is"}
+                    </Button>
+                    <Button size="sm" loading={busy === "visibility"} onClick={() => applyVisibility(widen)}>
+                      {widen === "open" ? "Make public" : "Make unlisted"}
+                    </Button>
+                  </div>
+                </div>
+              )}
+            </section>
+          )}
+
+          {isOwner && !archived && (
             <form onSubmit={save} className="space-y-6">
-              <RoomSettingsFields value={settings} onChange={setSettings} memberCount={room.members.length} />
+              <RoomSettingsFields value={settings} onChange={setSettings} memberCount={room.members.length} showVisibility={false} />
               <div className="flex justify-end">
                 <Button type="submit" loading={busy === "save"} disabled={!settings.name.trim()}>
                   Save changes

@@ -1,5 +1,7 @@
 # BookQuest alpha status
 
+> 2026-10-08: owners can switch a room between private, unlisted and public from Room settings, and the What's new window has a Share button that sends a link to a public `/whats-new` page. No database migration. See CHANGELOG.md.
+
 > 2026-10-07: the emotional multiplayer update is deployed (open signup with 75 seats, per-room feature toggles, predictions, polls, packages, five attention levels, page flip, book map, friend lens, live reading, rituals, afterparties, echoes, the vault, Home as a reading desk and the What's new window). See CHANGELOG.md for the full list; this file's older sections describe the state before it. Verified: 188 unit/database/integration tests, the full desktop and mobile browser suites, TypeScript, ESLint and the production build. Hosted migration `20261007182115_emotional_multiplayer.sql` is applied.
 
 Updated 2026-10-01. This file supersedes the implementation-status sections of the original HANDOFF.md.

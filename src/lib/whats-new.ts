@@ -7,7 +7,8 @@
 
 export type WhatsNewIcon =
   | "flip" | "attention" | "prediction" | "poll" | "package" | "map" | "lens" | "party" | "live" | "ritual"
-  | "vault" | "away" | "weather" | "echo" | "desk" | "seats" | "note" | "music" | "rail" | "draw" | "book";
+  | "vault" | "away" | "weather" | "echo" | "desk" | "seats" | "note" | "music" | "rail" | "draw" | "book"
+  | "room" | "share";
 
 export interface WhatsNewItem {
   icon: WhatsNewIcon;
@@ -26,6 +27,16 @@ export interface WhatsNewRelease {
 }
 
 export const WHATS_NEW: WhatsNewRelease[] = [
+  {
+    id: "2026-10-08-room-privacy-and-sharing",
+    date: "2026-10-08",
+    title: "Your room, your doors",
+    summary: "Decide who can walk into your room, and tell a friend what's new.",
+    items: [
+      { icon: "room", title: "Switch a room between private and public", body: "The person who owns a room can open it to everyone or close it to invited friends only, any time, from Room settings. Readers already inside stay." },
+      { icon: "share", title: "Share what's new", body: "Tap Share in the What's new window to send a friend a link to everything new. They can read it without an account." },
+    ],
+  },
   {
     id: "2026-10-07-emotional-multiplayer",
     date: "2026-10-07",
@@ -77,3 +88,26 @@ export const WHATS_NEW: WhatsNewRelease[] = [
 ];
 
 export const LATEST_RELEASE = WHATS_NEW[0];
+
+/** Where a shared What's new link lands: a public page, readable without an account. */
+export const WHATS_NEW_PATH = "/whats-new";
+
+/** How many headline features the shared message lists before pointing at the link. */
+const SHARE_HIGHLIGHTS = 4;
+
+/**
+ * The message a reader sends a friend. The title and text are written to stand
+ * on their own (a chat app shows them above the link preview); the link is
+ * kept separate so the share sheet can attach it natively.
+ */
+export function whatsNewShare(release: WhatsNewRelease, appName: string, origin: string) {
+  const url = `${origin.replace(/\/$/, "")}${WHATS_NEW_PATH}`;
+  const highlights = release.items.slice(0, SHARE_HIGHLIGHTS).map((item) => `• ${item.title}`);
+  const more = release.items.length - highlights.length;
+  const lines = [release.summary, "", ...highlights, ...(more > 0 ? [`…and ${more} more.`] : [])];
+  return {
+    title: `What's new in ${appName}: ${release.title}`,
+    text: lines.join("\n"),
+    url,
+  };
+}

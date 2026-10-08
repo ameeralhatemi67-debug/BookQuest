@@ -56,6 +56,11 @@ export function describeActivity(activity: Activity, people: Map<string, Activit
       const changes = Array.isArray(activity.data.changes) ? (activity.data.changes as string[]) : [];
       if (changes.includes("is_closed")) return { icon: <Settings2 className={icon} aria-hidden />, text: <>{who} {activity.data.is_closed ? "closed the room to new members" : "re-opened the room to new members"}.</> };
       if (changes.includes("reopened")) return { icon: <Settings2 className={icon} aria-hidden />, text: <>{who} re-opened this room.</> };
+      if (changes.includes("visibility")) {
+        const now = activity.data.visibility;
+        const what = now === "open" ? "made the room public" : now === "unlisted" ? "made the room unlisted" : "made the room private";
+        return { icon: <Settings2 className={icon} aria-hidden />, text: <>{who} {what}.</> };
+      }
       return { icon: <Settings2 className={icon} aria-hidden />, text: <>{who} updated the room.</> };
     }
     case "prediction_sealed":

@@ -158,6 +158,75 @@ describe("rooms: visibility, joining, invitations, roles", () => {
     });
   });
 
+  // ---------------------------------------------------------------- switching visibility
+  describe("the owner can switch a room between private and public", () => {
+    let roomId: string;
+    let stayer: TestUser;
+    const directory = async () => (await w.rpc<Preview[]>(outsider, "list_open_rooms")).map((r) => r.id);
+
+    beforeAll(async () => {
+      stayer = await w.signUp("Stayer");
+      roomId = await w.makeRoom(owner, book, { p_name: "Door", p_visibility: "private" });
+      await w.rpc(owner, "create_invite", { p_room_id: roomId }).then((invite) =>
+        w.rpc(stayer, "join_with_token", { p_token: (invite as { token: string }).token }),
+      );
+    });
+
+    it("lists the room and lets anyone join once it is public", async () => {
+      await denied(w.rpc(outsider, "join_open_room", { p_room_id: roomId }), "room_not_open");
+      expect(await directory()).not.toContain(roomId);
+
+      await w.rpc(owner, "update_room", { p_room_id: roomId, p_visibility: "open" });
+      expect(await directory()).toContain(roomId);
+      expect((await w.rpc<{ status: string }>(outsider, "join_open_room", { p_room_id: roomId })).status).toBe("joined");
+    });
+
+    it("tells the readers inside and keeps them there when it goes private again", async () => {
+      await w.rpc(owner, "update_room", { p_room_id: roomId, p_visibility: "private" });
+      const note = await w.rows(stayer, "notifications", { type: "eq.room_changed" });
+      expect(note.some((n) => (n.data as { visibility?: string }).visibility === "open")).toBe(true);
+      const log = await w.owner<{ data: { visibility: string } }>(
+        "select data from public.room_activity where room_id = $1 and type = 'room_updated' order by id",
+        [roomId],
+      );
+      expect(log.map((entry) => entry.data.visibility)).toEqual(["open", "private"]);
+
+      expect(await directory()).not.toContain(roomId);
+      expect(await memberRow(roomId, stayer)).toEqual({ status: "active", role: "member" });
+      expect(await memberRow(roomId, outsider)).toEqual({ status: "active", role: "member" });
+    });
+
+    it("stops the directory and the room link working for newcomers once private", async () => {
+      const newcomer = await w.signUp("Newcomer");
+      await denied(w.rpc(newcomer, "join_open_room", { p_room_id: roomId }), "room_not_open");
+      const [{ join_code }] = await w.owner<{ join_code: string }>("select join_code from public.rooms where id = $1", [roomId]);
+      await denied(w.rpc(newcomer, "join_with_token", { p_token: join_code }), "invite_not_found");
+      await denied(w.rpc(newcomer, "room_detail", { p_room_id: roomId }), "room_not_found");
+    });
+
+    it("lets only the owner do it: members and moderators are refused", async () => {
+      await denied(w.rpc(stayer, "update_room", { p_room_id: roomId, p_visibility: "open" }), "not_allowed");
+      await w.rpc(owner, "set_member_role", { p_room_id: roomId, p_user_id: stayer.id, p_role: "moderator" });
+      await denied(w.rpc(stayer, "update_room", { p_room_id: roomId, p_visibility: "open" }), "not_allowed");
+      await denied(w.rpc(outsider, "update_room", { p_room_id: roomId, p_visibility: "open" }), "not_allowed");
+      const [{ visibility }] = await w.owner<{ visibility: string }>("select visibility from public.rooms where id = $1", [roomId]);
+      expect(visibility).toBe("private");
+    });
+
+    it("never makes a Private Duo public", async () => {
+      const duo = await w.makeRoom(owner, book, { p_mode: "duo" });
+      await w.rpc(owner, "update_room", { p_room_id: duo, p_visibility: "open" });
+      const [{ visibility }] = await w.owner<{ visibility: string }>("select visibility from public.rooms where id = $1", [duo]);
+      expect(visibility).toBe("private");
+    });
+
+    it("hands the power to whoever owns the room next", async () => {
+      await w.rpc(owner, "transfer_ownership", { p_room_id: roomId, p_user_id: stayer.id });
+      await w.rpc(stayer, "update_room", { p_room_id: roomId, p_visibility: "unlisted" });
+      await denied(w.rpc(owner, "update_room", { p_room_id: roomId, p_visibility: "open" }), "not_allowed");
+    });
+  });
+
   // ---------------------------------------------------------------- invitations
   describe("invitations", () => {
     let roomId: string;

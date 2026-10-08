@@ -144,7 +144,7 @@ export function describeNotification(n: NotificationItem): Described {
       let what: ReactNode = "was updated";
       if (changes.includes("archived")) what = "was archived";
       else if (changes.includes("mode")) what = <>is now a {roomMode(String(n.data.mode)).name} room</>;
-      else if (changes.includes("visibility")) what = <>is now {VISIBILITY_INFO[String(n.data.visibility) as RoomVisibility]?.name.toLowerCase() ?? "different"}</>;
+      else if (changes.includes("visibility")) what = <>is now {n.data.visibility === "open" ? "public" : VISIBILITY_INFO[String(n.data.visibility) as RoomVisibility]?.name.toLowerCase() ?? "different"}</>;
       return { icon: <Settings2 className={iconClass} aria-hidden />, text: <>{room} {what}.</>, href: roomHref };
     }
     case "afterparty": {

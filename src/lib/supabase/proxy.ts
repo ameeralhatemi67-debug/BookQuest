@@ -2,7 +2,8 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 // Routes that never require a session.
-const PUBLIC_PATHS = ["/", "/login", "/signup", "/forgot-password", "/auth"];
+// /whats-new is what a shared What's new link opens; friends have no account yet.
+const PUBLIC_PATHS = ["/", "/login", "/signup", "/forgot-password", "/auth", "/whats-new"];
 
 function isPublic(pathname: string): boolean {
   return PUBLIC_PATHS.some((path) => pathname === path || (path !== "/" && pathname.startsWith(`${path}/`)));
